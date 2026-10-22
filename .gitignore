@@ -1,0 +1,6 @@
+﻿# Donnees d'eleves (confidentielles)
+data/
+Bulletins_Exemples/
+Rapports_Excel/
+*.pdf
+*.xlsx

@@ -1,0 +1,1610 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Classeurs Rouges — Suivi pluriannuel des élèves (Cycle d'Orientation)</title>
+<style>
+  :root {
+    --red-primary: #991B1B;
+    --red-dark: #7F1D1D;
+    --red-light: #FEE2E2;
+    --red-soft: #FEF2F2;
+    --slate-900: #0F172A;
+    --slate-800: #1E293B;
+    --slate-700: #334155;
+    --slate-600: #475569;
+    --slate-500: #64748B;
+    --slate-300: #CBD5E1;
+    --slate-200: #E2E8F0;
+    --slate-100: #F1F5F9;
+    --slate-50: #F8FAFC;
+    --emerald-700: #047857;
+    --emerald-100: #D1FAE5;
+    --amber-700: #B45309;
+    --amber-100: #FEF3C7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: var(--slate-100);
+    color: var(--slate-800);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+  /* Sidebar */
+  .sidebar {
+    width: 265px;
+    background: var(--slate-900);
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--slate-800);
+    flex-shrink: 0;
+  }
+  .brand {
+    padding: 20px 18px;
+    background: linear-gradient(135deg, var(--red-primary), var(--red-dark));
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+  }
+  .brand h1 {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .brand p {
+    font-size: 12px;
+    opacity: 0.85;
+    margin-top: 4px;
+  }
+  .offline-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 4px 9px;
+    border-radius: 99px;
+    background: rgba(0,0,0,0.28);
+    font-size: 11px;
+    color: #A7F3D0;
+    font-weight: 600;
+  }
+  .offline-dot {
+    width: 7px; height: 7px;
+    background: #10B981;
+    border-radius: 50%;
+  }
+  .nav-menu {
+    padding: 14px 10px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .nav-btn {
+    background: transparent;
+    border: none;
+    color: var(--slate-300);
+    text-align: left;
+    padding: 11px 14px;
+    border-radius: 8px;
+    font-size: 13.5px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.15s;
+  }
+  .nav-btn:hover {
+    background: rgba(255,255,255,0.07);
+    color: #fff;
+  }
+  .nav-btn.active {
+    background: var(--red-primary);
+    color: #fff;
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(153, 27, 27, 0.4);
+  }
+  .sidebar-footer {
+    padding: 14px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    font-size: 11.5px;
+    color: var(--slate-500);
+  }
+
+  /* Main content area */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .topbar {
+    height: 60px;
+    background: #fff;
+    border-bottom: 1px solid var(--slate-200);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .topbar-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--slate-900);
+  }
+  .topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 22px 26px;
+  }
+  .view-section { display: none; }
+  .view-section.active { display: block; }
+
+  /* Buttons & Inputs */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 15px;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn-primary {
+    background: var(--red-primary);
+    color: #fff;
+  }
+  .btn-primary:hover { background: var(--red-dark); }
+  .btn-secondary {
+    background: #fff;
+    color: var(--slate-700);
+    border-color: var(--slate-300);
+  }
+  .btn-secondary:hover { background: var(--slate-50); }
+  .btn-success {
+    background: var(--emerald-700);
+    color: #fff;
+  }
+  .btn-success:hover { background: #065F46; }
+  .btn-danger {
+    background: #fff;
+    color: #DC2626;
+    border-color: #FECACA;
+  }
+  .btn-danger:hover { background: #FEF2F2; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+  input[type="text"], select, textarea {
+    padding: 7px 10px;
+    border: 1px solid var(--slate-300);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    color: var(--slate-800);
+    background: #fff;
+  }
+  input[type="text"]:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--red-primary);
+    box-shadow: 0 0 0 2px rgba(153,27,27,0.12);
+  }
+
+  /* Cards & KPIs */
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 22px;
+  }
+  .kpi-card {
+    background: #fff;
+    border: 1px solid var(--slate-200);
+    border-radius: 10px;
+    padding: 16px 18px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  }
+  .kpi-label {
+    font-size: 12px;
+    color: var(--slate-500);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .kpi-value {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--slate-900);
+    margin-top: 6px;
+  }
+  .kpi-sub {
+    font-size: 12px;
+    color: var(--slate-500);
+    margin-top: 4px;
+  }
+
+  .card {
+    background: #fff;
+    border: 1px solid var(--slate-200);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--slate-100);
+  }
+  .card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--slate-900);
+  }
+
+  /* Tables */
+  .table-wrap {
+    overflow-x: auto;
+    border: 1px solid var(--slate-200);
+    border-radius: 8px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+  th {
+    background: var(--slate-100);
+    color: var(--slate-700);
+    font-weight: 700;
+    text-align: left;
+    padding: 9px 11px;
+    border-bottom: 1px solid var(--slate-200);
+    border-right: 1px solid var(--slate-200);
+    white-space: nowrap;
+  }
+  th.red-th {
+    background: var(--red-primary);
+    color: #fff;
+    text-align: center;
+    border-color: rgba(255,255,255,0.2);
+  }
+  th.center, td.center { text-align: center; }
+  td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--slate-200);
+    border-right: 1px solid var(--slate-200);
+    vertical-align: middle;
+  }
+  tr:hover td { background: var(--slate-50); }
+
+  /* Grade pills */
+  .grade-low {
+    background: var(--red-light) !important;
+    color: var(--red-primary) !important;
+    font-weight: 700;
+  }
+  .grade-ok {
+    color: var(--slate-800);
+  }
+  .grade-muted {
+    color: var(--slate-500);
+    font-style: italic;
+  }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-red { background: var(--red-light); color: var(--red-primary); }
+  .badge-green { background: var(--emerald-100); color: var(--emerald-700); }
+  .badge-amber { background: var(--amber-100); color: var(--amber-700); }
+  .badge-slate { background: var(--slate-200); color: var(--slate-700); }
+
+  /* Review Split Screen */
+  .review-layout {
+    display: grid;
+    grid-template-columns: 440px 1fr;
+    gap: 18px;
+    align-items: start;
+  }
+  .preview-box {
+    background: var(--slate-800);
+    border-radius: 10px;
+    padding: 12px;
+    text-align: center;
+    position: sticky;
+    top: 0;
+  }
+  .preview-box img {
+    max-width: 100%;
+    max-height: 74vh;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+  }
+  .form-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .form-group label {
+    display: block;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--slate-600);
+    margin-bottom: 4px;
+  }
+  .form-group input, .form-group select {
+    width: 100%;
+  }
+  .grade-input {
+    width: 64px !important;
+    text-align: center;
+    padding: 5px 6px !important;
+    font-weight: 600;
+  }
+  .grade-input.low {
+    background: var(--red-light);
+    color: var(--red-primary);
+    border-color: #FCA5A5;
+  }
+
+  /* Dropzone */
+  .dropzone {
+    border: 2px dashed var(--slate-300);
+    border-radius: 12px;
+    background: var(--slate-50);
+    padding: 36px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 18px;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: var(--red-primary);
+    background: var(--red-soft);
+  }
+  .dropzone h3 { font-size: 16px; color: var(--slate-900); margin-bottom: 6px; }
+  .dropzone p { font-size: 13px; color: var(--slate-500); margin-bottom: 14px; }
+
+  /* Loading overlay */
+  .loader-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+  }
+  .loader-overlay.active { display: flex; }
+  .loader-box {
+    background: #fff;
+    padding: 26px 34px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    max-width: 400px;
+  }
+  .spinner {
+    width: 38px; height: 38px;
+    border: 4px solid var(--slate-200);
+    border-top-color: var(--red-primary);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 14px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Toast */
+  .toast {
+    position: fixed;
+    bottom: 22px;
+    right: 22px;
+    background: var(--slate-900);
+    color: #fff;
+    padding: 12px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+    display: none;
+    z-index: 9998;
+  }
+</style>
+</head>
+<body>
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="brand">
+      <h1>📕 Classeurs Rouges</h1>
+      <p>Cycle d'Orientation — Suivi 9CO • 10CO • 11CO</p>
+      <div class="offline-badge">
+        <span class="offline-dot"></span> 100% Hors-Ligne & Confidentiel
+      </div>
+    </div>
+
+    <nav class="nav-menu">
+      <button class="nav-btn active" onclick="switchView('import')" id="nav-import">
+        📄 Importer des Bulletins (PDF)
+      </button>
+      <button class="nav-btn" onclick="switchView('cohort')" id="nav-cohort">
+        📊 Vue Classe / Cohorte (3 ans)
+      </button>
+      <button class="nav-btn" onclick="switchView('students')" id="nav-students">
+        🎓 Fiches Individuelles Élèves
+      </button>
+      <button class="nav-btn" onclick="switchView('manual')" id="nav-manual">
+        ✏️ Saisie / Édition Manuelle
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div>Stockage local chiffré/confidentiel :</div>
+      <div style="color:#CBD5E1; margin-top:3px; word-break:break-all;">data/classeurs_rouges_db.json</div>
+    </div>
+  </aside>
+
+  <!-- Main Area -->
+  <main class="main">
+    <header class="topbar">
+      <div class="topbar-title" id="topbar-title">Importation et Vérification des Bulletins Scolaires</div>
+      <div class="topbar-actions">
+        <button class="btn btn-secondary" onclick="triggerImportDialog()">📂 Charger PDF(s)</button>
+        <button class="btn btn-success" onclick="exportCurrentCohortExcel()">📗 Exporter le Rapport Excel (.xlsx)</button>
+      </div>
+    </header>
+
+    <div class="content">
+
+      <!-- ===================================================================== -->
+      <!-- VUE 1 : IMPORTATION & VERIFICATION DE BULLETINS PDF                   -->
+      <!-- ===================================================================== -->
+      <section class="view-section active" id="view-import">
+        <div class="dropzone" id="dropzone" onclick="triggerImportDialog()">
+          <h3>📥 Importer un ou plusieurs Bulletins Scolaires (PDF)</h3>
+          <p>Compatible avec les PDFs multi-pages d'une classe entière ET les PDFs individuels par élève (T1, T2 ou T3).<br>
+             Glissez-déposez vos fichiers PDF ici ou cliquez pour parcourir votre ordinateur.</p>
+          <button class="btn btn-primary" onclick="event.stopPropagation(); triggerImportDialog();">
+            Sélectionner des fichiers PDF…
+          </button>
+          <input type="file" id="file-input-fallback" accept=".pdf" multiple style="display:none" onchange="handleFileInputChange(event)">
+        </div>
+
+        <div id="review-container" style="display:none;">
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <span class="card-title" id="review-counter">Vérification du bulletin 1 / 1</span>
+                <span style="font-size:12px; color:var(--slate-500); margin-left:10px;" id="review-source-file"></span>
+              </div>
+              <div style="display:flex; gap:8px; align-items:center;">
+                <button class="btn btn-secondary btn-sm" onclick="prevReviewPage()" id="btn-prev-page">◀ Précédent</button>
+                <button class="btn btn-secondary btn-sm" onclick="nextReviewPage()" id="btn-next-page">Suivant ▶</button>
+                <button class="btn btn-primary" onclick="saveAllReviewedBulletins()">
+                  💾 Enregistrer dans la base (<span id="btn-save-count">1</span>)
+                </button>
+              </div>
+            </div>
+
+            <div class="review-layout">
+              <!-- Apercu visuel de la page PDF -->
+              <div class="preview-box">
+                <div style="color:#CBD5E1; font-size:12px; margin-bottom:8px; font-weight:600;">Aperçu du Bulletin Original</div>
+                <img id="review-preview-img" src="" alt="Aperçu du bulletin">
+              </div>
+
+              <!-- Formulaire d'edition et verification -->
+              <div>
+                <div style="background:var(--amber-100); color:var(--amber-700); padding:9px 12px; border-radius:7px; font-size:12.5px; margin-bottom:14px;">
+                  💡 <strong>Vérification avant sauvegarde :</strong> Vous pouvez corriger ou compléter n'importe quel champ ci-dessous. Si l'élève existe déjà (même N° d'élève ou même Nom), les notes du trimestre s'ajouteront automatiquement à son dossier sans écraser les trimestres ou années précédents.
+                </div>
+
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label>Nom et Prénom de l'élève *</label>
+                    <input type="text" id="rev-eleveNom" placeholder="ex: DUPONT MATEO" oninput="syncCurrentReviewField('eleveNom', this.value)">
+                  </div>
+                  <div class="form-group">
+                    <label>N° d'élève</label>
+                    <input type="text" id="rev-numEleve" placeholder="ex: 123456" oninput="syncCurrentReviewField('numEleve', this.value)">
+                  </div>
+                  <div class="form-group">
+                    <label>Année scolaire *</label>
+                    <input type="text" id="rev-anneeScolaire" placeholder="ex: 2018-2019" oninput="syncCurrentReviewField('anneeScolaire', this.value)">
+                  </div>
+                  <div class="form-group">
+                    <label>Niveau (9CO / 10CO / 11CO) *</label>
+                    <select id="rev-niveau" onchange="syncCurrentReviewField('niveau', this.value)">
+                      <option value="9CO">9CO (9e année)</option>
+                      <option value="10CO">10CO (10e année)</option>
+                      <option value="11CO">11CO (11e année)</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Classe *</label>
+                    <input type="text" id="rev-classe" placeholder="ex: 0905R3, 1012LS..." oninput="syncCurrentReviewField('classe', this.value)">
+                  </div>
+                  <div class="form-group">
+                    <label>Regroupement / Section</label>
+                    <input type="text" id="rev-regroupement" placeholder="ex: regroupement 3, Section LS..." oninput="syncCurrentReviewField('regroupement', this.value)">
+                  </div>
+                  <div class="form-group">
+                    <label>Maître-sse de classe</label>
+                    <input type="text" id="rev-maitre" placeholder="ex: MME MARIA TACCHINI" oninput="syncCurrentReviewField('maitre', this.value)">
+                  </div>
+                  <div class="form-group">
+                    <label>Situation de promotion</label>
+                    <input type="text" id="rev-situation" placeholder="ex: promu, promu par tolérance..." oninput="syncCurrentReviewField('situation', this.value)">
+                  </div>
+                  <div class="form-group">
+                    <label>Décision d'orientation</label>
+                    <input type="text" id="rev-orientation" placeholder="ex: 10e S, 11e LS..." oninput="syncCurrentReviewField('orientation', this.value)">
+                  </div>
+                </div>
+
+                <!-- Moyennes & Absences -->
+                <div class="form-grid" style="grid-template-columns: repeat(6, 1fr); background:var(--slate-50); padding:10px; border-radius:8px; border:1px solid var(--slate-200);">
+                  <div class="form-group">
+                    <label>Moy. Discipl. Princ.</label>
+                    <input type="text" id="rev-moyPrincipales" oninput="syncCurrentReviewField('moyPrincipales', this.value)">
+                  </div>
+                  <div class="form-group">
+                    <label>Moyenne Générale</label>
+                    <input type="text" id="rev-moyGenerale" oninput="syncCurrentReviewField('moyGenerale', this.value)">
+                  </div>
+                  <div class="form-group">
+                    <label>Absences T1</label>
+                    <input type="text" id="rev-absT1" oninput="syncCurrentReviewField('absT1', this.value)">
+                  </div>
+                  <div class="form-group">
+                    <label>Absences T2</label>
+                    <input type="text" id="rev-absT2" oninput="syncCurrentReviewField('absT2', this.value)">
+                  </div>
+                  <div class="form-group">
+                    <label>Absences T3</label>
+                    <input type="text" id="rev-absT3" oninput="syncCurrentReviewField('absT3', this.value)">
+                  </div>
+                  <div class="form-group">
+                    <label>Absences Total</label>
+                    <input type="text" id="rev-absTotal" oninput="syncCurrentReviewField('absTotal', this.value)">
+                  </div>
+                </div>
+
+                <!-- Tableau des disciplines -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin: 12px 0 8px;">
+                  <strong style="font-size:13px;">Notes par discipline (T1, T2, T3 et Moyenne) — accepte <code>(5.0)</code>, <code>C.M</code>, <code>Disp</code></strong>
+                  <button class="btn btn-secondary btn-sm" onclick="addDisciplineRowToReview()">➕ Ajouter une discipline</button>
+                </div>
+
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Discipline</th>
+                        <th class="center">Principale</th>
+                        <th class="center">T1</th>
+                        <th class="center">T2</th>
+                        <th class="center">T3</th>
+                        <th class="center">Moyenne</th>
+                        <th class="center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="rev-disciplines-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================================================================== -->
+      <!-- VUE 2 : VUE CLASSE / COHORTE PLURIANNUELLE (9CO - 10CO - 11CO)        -->
+      <!-- ===================================================================== -->
+      <section class="view-section" id="view-cohort">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-label">Élèves dans la sélection</div>
+            <div class="kpi-value" id="kpi-total-students">0</div>
+            <div class="kpi-sub">Suivi longitudinal 9CO → 11CO</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Moyenne Générale (Actuelle)</div>
+            <div class="kpi-value" id="kpi-avg-gen">—</div>
+            <div class="kpi-sub">Sur l'ensemble de la cohorte</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Élèves avec tolérance / insuff.</div>
+            <div class="kpi-value" id="kpi-alerts" style="color:var(--red-primary);">0</div>
+            <div class="kpi-sub">Moyenne &lt; 4.0 ou promu par tolérance</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-label">Total Absences (Année act.)</div>
+            <div class="kpi-value" id="kpi-absences">0</div>
+            <div class="kpi-sub">Cumul T1 + T2 + T3</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+              <span class="card-title">Filtrer par Cohorte / Classe :</span>
+              <select id="cohort-class-filter" onchange="renderCohortView()" style="min-width:190px; font-weight:600;"></select>
+              <select id="cohort-view-mode" onchange="renderCohortView()">
+                <option value="SYNTHESE">Vue Synthèse des 3 ans (9CO • 10CO • 11CO)</option>
+                <option value="9CO">Détail toutes matières — 9e année (9CO)</option>
+                <option value="10CO">Détail toutes matières — 10e année (10CO)</option>
+                <option value="11CO">Détail toutes matières — 11e année (11CO)</option>
+              </select>
+              <input type="text" id="cohort-search" placeholder="🔍 Rechercher un élève..." oninput="renderCohortView()">
+            </div>
+            <button class="btn btn-success" onclick="exportCurrentCohortExcel()">
+              📗 Générer le Classeur Excel (.xlsx) de cette classe
+            </button>
+          </div>
+
+          <div class="table-wrap" id="cohort-table-container"></div>
+        </div>
+      </section>
+
+      <!-- ===================================================================== -->
+      <!-- VUE 3 : FICHES INDIVIDUELLES ELEVES (9CO, 10CO, 11CO + REDOUBLEMENT)  -->
+      <!-- ===================================================================== -->
+      <section class="view-section" id="view-students">
+        <div class="card">
+          <div class="card-header">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <span class="card-title">Sélectionner un élève :</span>
+              <select id="student-select-dropdown" onchange="renderSingleStudentFicha()" style="min-width:280px; font-weight:600;"></select>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-secondary btn-sm" onclick="editSelectedStudentLatestYear()">✏️ Modifier ses notes</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteSelectedStudent()">🗑️ Supprimer l'élève</button>
+            </div>
+          </div>
+          <div id="student-ficha-container"></div>
+        </div>
+      </section>
+
+      <!-- ===================================================================== -->
+      <!-- VUE 4 : SAISIE / EDITION MANUELLE D'UN BULLETIN                       -->
+      <!-- ===================================================================== -->
+      <section class="view-section" id="view-manual">
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">Saisie ou Modification Manuelle d'un Bulletin Scolaire</span>
+            <button class="btn btn-primary" onclick="saveManualBulletin()">💾 Enregistrer ce bulletin</button>
+          </div>
+          <p style="font-size:13px; color:var(--slate-600); margin-bottom:14px;">
+            Utilisez ce formulaire pour ajouter manuellement un trimestre/année à un élève ou modifier un bulletin existant.
+          </p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Nom et Prénom de l'élève *</label>
+              <input type="text" id="man-eleveNom" placeholder="ex: DUPONT MATEO">
+            </div>
+            <div class="form-group">
+              <label>N° d'élève</label>
+              <input type="text" id="man-numEleve" placeholder="ex: 104592">
+            </div>
+            <div class="form-group">
+              <label>Année scolaire *</label>
+              <input type="text" id="man-anneeScolaire" value="2025-2026">
+            </div>
+            <div class="form-group">
+              <label>Niveau *</label>
+              <select id="man-niveau">
+                <option value="9CO">9CO</option>
+                <option value="10CO">10CO</option>
+                <option value="11CO">11CO</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Classe *</label>
+              <input type="text" id="man-classe" placeholder="ex: 0905R3">
+            </div>
+            <div class="form-group">
+              <label>Regroupement / Section</label>
+              <input type="text" id="man-regroupement" placeholder="ex: regroupement 3">
+            </div>
+            <div class="form-group">
+              <label>Maître-sse de classe</label>
+              <input type="text" id="man-maitre" placeholder="ex: MME MARIA TACCHINI">
+            </div>
+            <div class="form-group">
+              <label>Situation</label>
+              <input type="text" id="man-situation" placeholder="ex: promu par tolérance">
+            </div>
+            <div class="form-group">
+              <label>Décision d'orientation</label>
+              <input type="text" id="man-orientation" placeholder="ex: 10e S">
+            </div>
+          </div>
+
+          <div class="form-grid" style="grid-template-columns: repeat(6, 1fr); background:var(--slate-50); padding:10px; border-radius:8px; margin-bottom:14px;">
+            <div class="form-group"><label>Moy. Princ.</label><input type="text" id="man-moyPrincipales"></div>
+            <div class="form-group"><label>Moy. Générale</label><input type="text" id="man-moyGenerale"></div>
+            <div class="form-group"><label>Abs T1</label><input type="text" id="man-absT1"></div>
+            <div class="form-group"><label>Abs T2</label><input type="text" id="man-absT2"></div>
+            <div class="form-group"><label>Abs T3</label><input type="text" id="man-absT3"></div>
+            <div class="form-group"><label>Abs Total</label><input type="text" id="man-absTotal"></div>
+          </div>
+
+          <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+            <strong>Disciplines et notes trimestrielles</strong>
+            <button class="btn btn-secondary btn-sm" onclick="addManualDisciplineRow()">➕ Ajouter une discipline</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Discipline</th>
+                  <th class="center">Principale</th>
+                  <th class="center">T1</th>
+                  <th class="center">T2</th>
+                  <th class="center">T3</th>
+                  <th class="center">Moyenne</th>
+                  <th class="center">Action</th>
+                </tr>
+              </thead>
+              <tbody id="man-disciplines-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- Loading Overlay -->
+  <div class="loader-overlay" id="loader">
+    <div class="loader-box">
+      <div class="spinner"></div>
+      <div style="font-weight:700; font-size:15px; color:var(--slate-900);" id="loader-text">Analyse du bulletin PDF en cours…</div>
+      <div style="font-size:12.5px; color:var(--slate-500); margin-top:6px;">Extraction locale des matières, notes trimestrielles et absences (100% hors-ligne).</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+<script>
+  let appDb = { students: [] };
+  let reviewList = [];
+  let reviewIndex = 0;
+  let manualDisciplines = [];
+
+  const DEFAULT_DISCIPLINES_9CO = [
+    { discipline: "Français", principale: true, t1: "", t2: "", t3: "", moyenne: "" },
+    { discipline: "Allemand", principale: true, t1: "", t2: "", t3: "", moyenne: "" },
+    { discipline: "Anglais", principale: false, t1: "", t2: "", t3: "", moyenne: "" },
+    { discipline: "Mathématiques", principale: true, t1: "", t2: "", t3: "", moyenne: "" },
+    { discipline: "Biologie", principale: false, t1: "", t2: "", t3: "", moyenne: "" },
+    { discipline: "Histoire", principale: false, t1: "", t2: "", t3: "", moyenne: "" },
+    { discipline: "Géographie", principale: false, t1: "", t2: "", t3: "", moyenne: "" },
+    { discipline: "Activités créatrices et manuelles", principale: false, t1: "", t2: "", t3: "", moyenne: "" },
+    { discipline: "Musique", principale: false, t1: "", t2: "", t3: "", moyenne: "" },
+    { discipline: "Education physique", principale: false, t1: "", t2: "", t3: "", moyenne: "" },
+    { discipline: "Education nutritionnelle", principale: false, t1: "", t2: "", t3: "", moyenne: "" }
+  ];
+
+  function showLoader(msg) {
+    document.getElementById('loader-text').textContent = msg || "Traitement en cours…";
+    document.getElementById('loader').classList.add('active');
+  }
+  function hideLoader() {
+    document.getElementById('loader').classList.remove('active');
+  }
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 3800);
+  }
+
+  function switchView(viewName) {
+    document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById('view-' + viewName).classList.add('active');
+    document.getElementById('nav-' + viewName).classList.add('active');
+
+    const titles = {
+      import: "Importation et Vérification des Bulletins Scolaires (PDF)",
+      cohort: "Suivi Pluriannuel par Classe / Cohorte (9CO • 10CO • 11CO)",
+      students: "Fiches Individuelles de Suivi Longitudinal",
+      manual: "Saisie et Édition Manuelle d'un Bulletin"
+    };
+    document.getElementById('topbar-title').textContent = titles[viewName] || "Classeurs Rouges";
+
+    if (viewName === 'cohort') renderCohortView();
+    if (viewName === 'students') renderSingleStudentFicha();
+  }
+
+  async function loadDatabaseFromServer() {
+    try {
+      const res = await fetch('/api/db');
+      const data = await res.json();
+      if (data.ok && data.db) {
+        appDb = data.db;
+        if (!Array.isArray(appDb.students)) appDb.students = [];
+        populateClassFilterDropdown();
+        populateStudentSelectDropdown();
+        renderCohortView();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  // Drag & drop PDF support
+  const dz = document.getElementById('dropzone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+  dz.addEventListener('drop', async e => {
+    e.preventDefault();
+    dz.classList.remove('dragover');
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      await uploadPdfFilesViaBrowser(e.dataTransfer.files);
+    }
+  });
+
+  async function triggerImportDialog() {
+    showLoader("Ouverture de la sélection et extraction des bulletins PDF…");
+    try {
+      const res = await fetch('/api/pick-pdfs', { method: 'POST' });
+      const data = await res.json();
+      hideLoader();
+      if (data.cancelled) return;
+      if (data.ok && data.bulletins && data.bulletins.length > 0) {
+        reviewList = data.bulletins;
+        reviewIndex = 0;
+        switchView('import');
+        renderReviewScreen();
+        showToast(`✅ ${reviewList.length} bulletin(s) extrait(s) avec succès !`);
+      } else {
+        document.getElementById('file-input-fallback').click();
+      }
+    } catch (err) {
+      hideLoader();
+      document.getElementById('file-input-fallback').click();
+    }
+  }
+
+  async function handleFileInputChange(e) {
+    if (e.target.files && e.target.files.length > 0) {
+      await uploadPdfFilesViaBrowser(e.target.files);
+      e.target.value = "";
+    }
+  }
+
+  async function uploadPdfFilesViaBrowser(fileList) {
+    showLoader(`Analyse de ${fileList.length} fichier(s) PDF…`);
+    try {
+      const filesPayload = [];
+      for (const f of fileList) {
+        const b64 = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result);
+          r.onerror = reject;
+          r.readAsDataURL(f);
+        });
+        filesPayload.push({ fileName: f.name, dataBase64: b64 });
+      }
+      const res = await fetch('/api/upload-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ files: filesPayload })
+      });
+      const data = await res.json();
+      hideLoader();
+      if (data.ok && data.bulletins && data.bulletins.length > 0) {
+        reviewList = data.bulletins;
+        reviewIndex = 0;
+        switchView('import');
+        renderReviewScreen();
+        showToast(`✅ ${reviewList.length} bulletin(s) extrait(s) !`);
+      } else {
+        alert("Erreur lors de l'extraction : " + (data.error || "Aucun bulletin détecté"));
+      }
+    } catch (err) {
+      hideLoader();
+      alert("Erreur : " + err.message);
+    }
+  }
+
+  function isInsufficientGrade(val) {
+    if (!val) return false;
+    const s = String(val).trim();
+    if (s.startsWith('(') || /^(C\.M|Disp|N\.E)/i.test(s)) return false;
+    const n = parseFloat(s.replace(',', '.'));
+    return !isNaN(n) && n < 4.0;
+  }
+
+  function formatGradeCellHtml(val, isBold = false) {
+    if (!val) return '<span style="color:#CBD5E1;">—</span>';
+    const s = String(val).trim();
+    if (s.startsWith('(') || /^(C\.M|Disp|N\.E)/i.test(s)) {
+      return `<span class="grade-muted">${escapeHtml(s)}</span>`;
+    }
+    const n = parseFloat(s.replace(',', '.'));
+    if (!isNaN(n)) {
+      const cls = n < 4.0 ? 'grade-low' : 'grade-ok';
+      const weight = isBold ? 'font-weight:700;' : '';
+      return `<span class="${cls}" style="padding:2px 6px; border-radius:4px; ${weight}">${n.toFixed(1)}</span>`;
+    }
+    return escapeHtml(s);
+  }
+
+  function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // Review screen logic
+  function renderReviewScreen() {
+    const container = document.getElementById('review-container');
+    if (!reviewList || reviewList.length === 0) {
+      container.style.display = 'none';
+      return;
+    }
+    container.style.display = 'block';
+    const b = reviewList[reviewIndex];
+
+    document.getElementById('review-counter').textContent = `Vérification du bulletin ${reviewIndex + 1} sur ${reviewList.length}`;
+    document.getElementById('review-source-file').textContent = `(${b.sourceFile || 'PDF'} — Page ${b.pageNumber || 1})`;
+    document.getElementById('btn-save-count').textContent = reviewList.length;
+    document.getElementById('btn-prev-page').disabled = (reviewIndex === 0);
+    document.getElementById('btn-next-page').disabled = (reviewIndex === reviewList.length - 1);
+
+    document.getElementById('review-preview-img').src = b.previewImage || '';
+    document.getElementById('rev-eleveNom').value = b.eleveNom || '';
+    document.getElementById('rev-numEleve').value = b.numEleve || '';
+    document.getElementById('rev-anneeScolaire').value = b.anneeScolaire || '';
+    document.getElementById('rev-niveau').value = b.niveau || '9CO';
+    document.getElementById('rev-classe').value = b.classe || '';
+    document.getElementById('rev-regroupement').value = b.regroupement || '';
+    document.getElementById('rev-maitre').value = b.maitre || '';
+    document.getElementById('rev-situation').value = b.situation || '';
+    document.getElementById('rev-orientation').value = b.orientation || '';
+    document.getElementById('rev-moyPrincipales').value = b.moyPrincipales || '';
+    document.getElementById('rev-moyGenerale').value = b.moyGenerale || '';
+    document.getElementById('rev-absT1').value = b.absT1 || '';
+    document.getElementById('rev-absT2').value = b.absT2 || '';
+    document.getElementById('rev-absT3').value = b.absT3 || '';
+    document.getElementById('rev-absTotal').value = b.absTotal || '';
+
+    renderReviewDisciplinesTable();
+  }
+
+  function renderReviewDisciplinesTable() {
+    const b = reviewList[reviewIndex];
+    if (!Array.isArray(b.disciplines)) b.disciplines = [];
+    const tbody = document.getElementById('rev-disciplines-tbody');
+    tbody.innerHTML = b.disciplines.map((d, idx) => `
+      <tr>
+        <td>
+          <input type="text" value="${escapeHtml(d.discipline)}" style="width:100%; font-weight:${d.principale ? '700' : '400'};"
+                 oninput="updateReviewDisc(${idx}, 'discipline', this.value)">
+        </td>
+        <td class="center">
+          <input type="checkbox" ${d.principale ? 'checked' : ''} onchange="updateReviewDisc(${idx}, 'principale', this.checked)">
+        </td>
+        <td class="center">
+          <input type="text" class="grade-input ${isInsufficientGrade(d.t1) ? 'low' : ''}" value="${escapeHtml(d.t1)}"
+                 oninput="updateReviewDisc(${idx}, 't1', this.value, this)">
+        </td>
+        <td class="center">
+          <input type="text" class="grade-input ${isInsufficientGrade(d.t2) ? 'low' : ''}" value="${escapeHtml(d.t2)}"
+                 oninput="updateReviewDisc(${idx}, 't2', this.value, this)">
+        </td>
+        <td class="center">
+          <input type="text" class="grade-input ${isInsufficientGrade(d.t3) ? 'low' : ''}" value="${escapeHtml(d.t3)}"
+                 oninput="updateReviewDisc(${idx}, 't3', this.value, this)">
+        </td>
+        <td class="center">
+          <input type="text" class="grade-input ${isInsufficientGrade(d.moyenne) ? 'low' : ''}" value="${escapeHtml(d.moyenne)}"
+                 oninput="updateReviewDisc(${idx}, 'moyenne', this.value, this)">
+        </td>
+        <td class="center">
+          <button class="btn btn-danger btn-sm" onclick="removeReviewDisc(${idx})" title="Supprimer cette ligne">✕</button>
+        </td>
+      </tr>
+    `).join('');
+  }
+
+  function syncCurrentReviewField(field, val) {
+    if (!reviewList[reviewIndex]) return;
+    reviewList[reviewIndex][field] = val;
+  }
+
+  function updateReviewDisc(idx, field, val, inputEl) {
+    const d = reviewList[reviewIndex].disciplines[idx];
+    if (!d) return;
+    d[field] = val;
+    if (inputEl) {
+      if (isInsufficientGrade(val)) inputEl.classList.add('low');
+      else inputEl.classList.remove('low');
+    } else if (field === 'principale') {
+      renderReviewDisciplinesTable();
+    }
+  }
+
+  function addDisciplineRowToReview() {
+    reviewList[reviewIndex].disciplines.push({
+      discipline: "", principale: false, t1: "", t2: "", t3: "", moyenne: ""
+    });
+    renderReviewDisciplinesTable();
+  }
+
+  function removeReviewDisc(idx) {
+    reviewList[reviewIndex].disciplines.splice(idx, 1);
+    renderReviewDisciplinesTable();
+  }
+
+  function prevReviewPage() {
+    if (reviewIndex > 0) { reviewIndex--; renderReviewScreen(); }
+  }
+  function nextReviewPage() {
+    if (reviewIndex < reviewList.length - 1) { reviewIndex++; renderReviewScreen(); }
+  }
+
+  async function saveAllReviewedBulletins() {
+    for (let i = 0; i < reviewList.length; i++) {
+      if (!reviewList[i].eleveNom || !reviewList[i].eleveNom.trim()) {
+        reviewIndex = i;
+        renderReviewScreen();
+        document.getElementById('rev-eleveNom').focus();
+        alert(`Veuillez renseigner le Nom et Prénom de l'élève sur le bulletin ${i + 1} avant d'enregistrer.`);
+        return;
+      }
+    }
+
+    showLoader("Enregistrement et fusion dans la base de données…");
+    try {
+      const payload = reviewList.map(b => {
+        const copy = Object.assign({}, b);
+        delete copy.previewImage;
+        return copy;
+      });
+      const res = await fetch('/api/save-bulletins', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bulletins: payload })
+      });
+      const data = await res.json();
+      hideLoader();
+      if (data.ok) {
+        appDb = data.db;
+        reviewList = [];
+        document.getElementById('review-container').style.display = 'none';
+        populateClassFilterDropdown();
+        populateStudentSelectDropdown();
+        switchView('cohort');
+        showToast(`✅ ${data.savedCount} bulletin(s) enregistré(s) avec succès !`);
+      } else {
+        alert("Erreur lors de la sauvegarde : " + data.error);
+      }
+    } catch (e) {
+      hideLoader();
+      alert("Erreur : " + e.message);
+    }
+  }
+
+  // ===========================================================================
+  // VUE COHORTE / CLASSE PLURIANNUELLE
+  // ===========================================================================
+  function populateClassFilterDropdown() {
+    const sel = document.getElementById('cohort-class-filter');
+    const prevVal = sel.value;
+    const classesSet = new Set();
+    (appDb.students || []).forEach(st => {
+      if (st.classeActuelle) classesSet.add(st.classeActuelle);
+      (st.history || []).forEach(h => { if (h.classe) classesSet.add(h.classe); });
+    });
+    const sortedClasses = Array.from(classesSet).sort();
+    let html = `<option value="TOUTES">Toutes les classes (${(appDb.students || []).length} élèves)</option>`;
+    sortedClasses.forEach(c => {
+      html += `<option value="${escapeHtml(c)}">Classe / Cohorte ${escapeHtml(c)}</option>`;
+    });
+    sel.innerHTML = html;
+    if (prevVal && (prevVal === 'TOUTES' || classesSet.has(prevVal))) {
+      sel.value = prevVal;
+    }
+  }
+
+  function getFilteredCohortStudents() {
+    const cls = document.getElementById('cohort-class-filter').value || 'TOUTES';
+    const q = (document.getElementById('cohort-search').value || '').trim().toLowerCase();
+    return (appDb.students || []).filter(st => {
+      const inCls = (cls === 'TOUTES') || (st.classeActuelle === cls) ||
+                    (st.history || []).some(h => h.classe === cls);
+      if (!inCls) return false;
+      if (!q) return true;
+      return (st.eleveNom || '').toLowerCase().includes(q) ||
+             (st.numEleve || '').toLowerCase().includes(q) ||
+             (st.classeActuelle || '').toLowerCase().includes(q);
+    });
+  }
+
+  function renderCohortView() {
+    const students = getFilteredCohortStudents();
+    const mode = document.getElementById('cohort-view-mode').value || 'SYNTHESE';
+
+    // Update KPIs
+    document.getElementById('kpi-total-students').textContent = students.length;
+    let sumMoy = 0, countMoy = 0, alerts = 0, totalAbs = 0;
+    students.forEach(st => {
+      const hist = st.history || [];
+      if (hist.length > 0) {
+        const latest = hist[hist.length - 1];
+        const mg = parseFloat(String(latest.moyGenerale || '').replace(',', '.'));
+        const mp = parseFloat(String(latest.moyPrincipales || '').replace(',', '.'));
+        if (!isNaN(mg)) { sumMoy += mg; countMoy++; }
+        if ((!isNaN(mg) && mg < 4.0) || (!isNaN(mp) && mp < 4.0) || /tolérance|non promu/i.test(latest.situation || '')) {
+          alerts++;
+        }
+        const ab = parseInt(latest.absTotal, 10);
+        if (!isNaN(ab)) totalAbs += ab;
+      }
+    });
+    document.getElementById('kpi-avg-gen').textContent = countMoy > 0 ? (sumMoy / countMoy).toFixed(2) : '—';
+    document.getElementById('kpi-alerts').textContent = alerts;
+    document.getElementById('kpi-absences').textContent = totalAbs;
+
+    const container = document.getElementById('cohort-table-container');
+    if (students.length === 0) {
+      container.innerHTML = `<div style="padding:32px; text-align:center; color:var(--slate-500);">
+        Aucun élève enregistré dans cette sélection. Cliquez sur <strong>Charger PDF(s)</strong> pour importer des bulletins.
+      </div>`;
+      return;
+    }
+
+    if (mode === 'SYNTHESE') {
+      renderCohortSyntheseTable(container, students);
+    } else {
+      renderCohortLevelDetailTable(container, students, mode);
+    }
+  }
+
+  function renderCohortSyntheseTable(container, students) {
+    let html = `<table>
+      <thead>
+        <tr>
+          <th class="red-th" colspan="3">IDENTITÉ DE L'ÉLÈVE</th>
+          <th class="red-th" colspan="5">9e ANNÉE (9CO)</th>
+          <th class="red-th" colspan="5">10e ANNÉE (10CO)</th>
+          <th class="red-th" colspan="5">11e ANNÉE (11CO)</th>
+          <th class="red-th">ACTIONS</th>
+        </tr>
+        <tr>
+          <th>Nom et Prénom</th>
+          <th class="center">N° Élève</th>
+          <th class="center">Classe Act.</th>
+          <th class="center">Classe 9e</th>
+          <th class="center">Moy.P</th>
+          <th class="center">Moy.G</th>
+          <th class="center">Abs (T1/T2/T3/Tot)</th>
+          <th>Situation 9e</th>
+          <th class="center">Classe 10e</th>
+          <th class="center">Moy.P</th>
+          <th class="center">Moy.G</th>
+          <th class="center">Abs (T1/T2/T3/Tot)</th>
+          <th>Situation 10e</th>
+          <th class="center">Classe 11e</th>
+          <th class="center">Moy.P</th>
+          <th class="center">Moy.G</th>
+          <th class="center">Abs (T1/T2/T3/Tot)</th>
+          <th>Situation 11e</th>
+          <th class="center">Dossier</th>
+        </tr>
+      </thead>
+      <tbody>`;
+
+    students.forEach(st => {
+      const hist = st.history || [];
+      const levelCounts = {};
+      hist.forEach(h => { levelCounts[h.niveau] = (levelCounts[h.niveau] || 0) + 1; });
+      const isRedoublant = Object.values(levelCounts).some(c => c > 1);
+
+      html += `<tr>
+        <td>
+          <a href="javascript:void(0)" onclick="openStudentFicha('${st.id}')" style="font-weight:700; color:var(--slate-900); text-decoration:none;">
+            ${escapeHtml(st.eleveNom)}
+          </a>
+          ${isRedoublant ? ' <span class="badge badge-amber" title="Redoublement enregistré">Redoubl.</span>' : ''}
+        </td>
+        <td class="center">${escapeHtml(st.numEleve || '—')}</td>
+        <td class="center"><span class="badge badge-slate">${escapeHtml(st.classeActuelle || '—')}</span></td>`;
+
+      ['9CO', '10CO', '11CO'].forEach(niv => {
+        const recs = hist.filter(h => h.niveau === niv);
+        if (recs.length === 0) {
+          html += `<td class="center" style="color:#CBD5E1;">—</td>
+                   <td class="center" style="color:#CBD5E1;">—</td>
+                   <td class="center" style="color:#CBD5E1;">—</td>
+                   <td class="center" style="color:#CBD5E1;">—</td>
+                   <td style="color:#CBD5E1;">—</td>`;
+        } else {
+          const r = recs[recs.length - 1];
+          const clsLabel = recs.length > 1
+            ? recs.map(x => `${x.classe} (${x.anneeScolaire})`).join(' / ')
+            : `${r.classe || ''} <span style="color:var(--slate-500); font-size:11px;">(${r.anneeScolaire || ''})</span>`;
+          const absStr = `${r.absT1 || '–'} / ${r.absT2 || '–'} / ${r.absT3 || '–'} <strong>(${r.absTotal || '0'})</strong>`;
+          const sitBadge = /tolérance/i.test(r.situation || '')
+            ? `<span class="badge badge-amber">${escapeHtml(r.situation)}</span>`
+            : (/non promu/i.test(r.situation || '')
+               ? `<span class="badge badge-red">${escapeHtml(r.situation)}</span>`
+               : (r.situation ? `<span class="badge badge-green">${escapeHtml(r.situation)}</span>` : '—'));
+
+          html += `<td class="center">${clsLabel}</td>
+                   <td class="center">${formatGradeCellHtml(r.moyPrincipales, true)}</td>
+                   <td class="center">${formatGradeCellHtml(r.moyGenerale, true)}</td>
+                   <td class="center" style="font-size:11.5px;">${absStr}</td>
+                   <td>${sitBadge} ${r.orientation ? `<span style="font-size:11px; color:var(--slate-600);">→ ${escapeHtml(r.orientation)}</span>` : ''}</td>`;
+        }
+      });
+
+      html += `<td class="center">
+        <button class="btn btn-secondary btn-sm" onclick="openStudentFicha('${st.id}')">👁️ Voir 3 ans</button>
+      </td></tr>`;
+    });
+
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+  }
+
+  function renderCohortLevelDetailTable(container, students, niv) {
+    // Collect all distinct disciplines for this level
+    const discList = [];
+    students.forEach(st => {
+      (st.history || []).filter(h => h.niveau === niv).forEach(h => {
+        (h.disciplines || []).forEach(d => {
+          if (d.discipline && !discList.some(x => x.toLowerCase() === d.discipline.toLowerCase())) {
+            discList.push(d.discipline);
+          }
+        });
+      });
+    });
+
+    let html = `<table>
+      <thead>
+        <tr>
+          <th class="red-th" colspan="6">ÉLÈVE & MOYENNES (${niv})</th>
+          ${discList.map(d => `<th class="red-th" colspan="4">${escapeHtml(d)}</th>`).join('')}
+        </tr>
+        <tr>
+          <th>Nom et Prénom</th>
+          <th class="center">Année</th>
+          <th class="center">Classe</th>
+          <th class="center">Moy.P</th>
+          <th class="center">Moy.G</th>
+          <th class="center">Abs Tot.</th>
+          ${discList.map(() => `<th class="center">T1</th><th class="center">T2</th><th class="center">T3</th><th class="center" style="background:#E2E8F0;">Moy</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>`;
+
+    let rowCount = 0;
+    students.forEach(st => {
+      const recs = (st.history || []).filter(h => h.niveau === niv);
+      recs.forEach(r => {
+        rowCount++;
+        html += `<tr>
+          <td><a href="javascript:void(0)" onclick="openStudentFicha('${st.id}')" style="font-weight:700; color:var(--slate-900); text-decoration:none;">${escapeHtml(st.eleveNom)}</a></td>
+          <td class="center">${escapeHtml(r.anneeScolaire)}</td>
+          <td class="center"><span class="badge badge-slate">${escapeHtml(r.classe)}</span></td>
+          <td class="center">${formatGradeCellHtml(r.moyPrincipales, true)}</td>
+          <td class="center">${formatGradeCellHtml(r.moyGenerale, true)}</td>
+          <td class="center"><strong>${escapeHtml(r.absTotal || '—')}</strong></td>`;
+
+        discList.forEach(dName => {
+          const found = (r.disciplines || []).find(x => (x.discipline || '').toLowerCase() === dName.toLowerCase());
+          if (!found) {
+            html += `<td class="center">—</td><td class="center">—</td><td class="center">—</td><td class="center" style="background:#F8FAFC;">—</td>`;
+          } else {
+            html += `<td class="center">${formatGradeCellHtml(found.t1)}</td>
+                     <td class="center">${formatGradeCellHtml(found.t2)}</td>
+                     <td class="center">${formatGradeCellHtml(found.t3)}</td>
+                     <td class="center" style="background:#F8FAFC;">${formatGradeCellHtml(found.moyenne, true)}</td>`;
+          }
+        });
+        html += `</tr>`;
+      });
+    });
+
+    if (rowCount === 0) {
+      html += `<tr><td colspan="${6 + discList.length * 4}" class="center" style="padding:24px; color:var(--slate-500);">Aucun bulletin enregistré pour le niveau ${niv} dans cette sélection.</td></tr>`;
+    }
+    html += `</tbody></table>`;
+    container.innerHTML = html;
+  }
+
+  // ===========================================================================
+  // VUE FICHE INDIVIDUELLE ELEVE (3 ANS)
+  // ===========================================================================
+  function populateStudentSelectDropdown() {
+    const sel = document.getElementById('student-select-dropdown');
+    const prev = sel.value;
+    const list = appDb.students || [];
+    sel.innerHTML = list.map(st =>
+      `<option value="${st.id}">${escapeHtml(st.eleveNom)} — Classe ${escapeHtml(st.classeActuelle || '?')} (N° ${escapeHtml(st.numEleve || '—')})</option>`
+    ).join('');
+    if (prev && list.some(s => s.id === prev)) sel.value = prev;
+  }
+
+  function openStudentFicha(studentId) {
+    populateStudentSelectDropdown();
+    document.getElementById('student-select-dropdown').value = studentId;
+    switchView('students');
+  }
+
+  function renderSingleStudentFicha() {
+    const container = document.getElementById('student-ficha-container');
+    const studentId = document.getElementById('student-select-dropdown').value;
+    const st = (appDb.students || []).find(s => s.id === studentId);
+    if (!st) {
+      container.innerHTML = `<div style="padding:24px; color:var(--slate-500);">Aucun élève sélectionné.</div>`;
+      return;
+    }
+
+    let html = `
+      <div style="background:var(--slate-50); padding:14px 18px; border-radius:8px; border:1px solid var(--slate-200); margin-bottom:18px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h2 style="font-size:18px; color:var(--slate-900);">${escapeHtml(st.eleveNom)}</h2>
+          <div style="font-size:13px; color:var(--slate-600); margin-top:4px;">
+            N° d'élève : <strong>${escapeHtml(st.numEleve || 'Non renseigné')}</strong> &nbsp;|&nbsp;
+            Classe actuelle : <strong>${escapeHtml(st.classeActuelle || '—')}</strong> (${escapeHtml(st.niveauActuel || '—')}) &nbsp;|&nbsp;
+            Années enregistrées : <strong>${(st.history || []).length}</strong>
+          </div>
+        </div>
+      </div>`;
+
+    (st.history || []).forEach(rec => {
+      html += `
+        <div class="card" style="border-left: 4px solid var(--red-primary);">
+          <div class="card-header">
+            <div>
+              <span class="badge badge-red" style="font-size:12.5px; margin-right:8px;">${escapeHtml(rec.niveau)}</span>
+              <strong style="font-size:15px;">Année scolaire ${escapeHtml(rec.anneeScolaire)} — Classe ${escapeHtml(rec.classe)}</strong>
+              <span style="color:var(--slate-500); font-size:13px; margin-left:8px;">(${escapeHtml(rec.regroupement || '')} • Maître : ${escapeHtml(rec.maitre || '—')})</span>
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn btn-secondary btn-sm" onclick='loadYearIntoManualEditor(${JSON.stringify(st.eleveNom)}, ${JSON.stringify(st.numEleve)}, ${JSON.stringify(rec)})'>✏️ Éditer cette année</button>
+              <button class="btn btn-danger btn-sm" onclick="deleteStudentYear('${st.id}', '${escapeHtml(rec.anneeScolaire)}', '${escapeHtml(rec.niveau)}')">🗑️ Supprimer l'année</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Discipline</th>
+                  <th class="center">Catégorie</th>
+                  <th class="center">T1</th>
+                  <th class="center">T2</th>
+                  <th class="center">T3</th>
+                  <th class="center">Moyenne Annuelle</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${(rec.disciplines || []).map(d => `
+                  <tr>
+                    <td style="font-weight:${d.principale ? '700' : '400'};">${escapeHtml(d.discipline)}</td>
+                    <td class="center">${d.principale ? '<span class="badge badge-slate">Principale</span>' : '<span style="color:var(--slate-500); font-size:11.5px;">Autre discipline</span>'}</td>
+                    <td class="center">${formatGradeCellHtml(d.t1)}</td>
+                    <td class="center">${formatGradeCellHtml(d.t2)}</td>
+                    <td class="center">${formatGradeCellHtml(d.t3)}</td>
+                    <td class="center" style="background:var(--slate-50);">${formatGradeCellHtml(d.moyenne, true)}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:12px; padding:10px 14px; background:var(--slate-50); border-radius:7px; font-size:13px;">
+            <div>Moy. Disciplines Principales : ${formatGradeCellHtml(rec.moyPrincipales, true)}</div>
+            <div>Moyenne Générale : ${formatGradeCellHtml(rec.moyGenerale, true)}</div>
+            <div>Absences : <strong>T1: ${escapeHtml(rec.absT1 || '0')}</strong> | <strong>T2: ${escapeHtml(rec.absT2 || '0')}</strong> | <strong>T3: ${escapeHtml(rec.absT3 || '0')}</strong> | <strong>Total: ${escapeHtml(rec.absTotal || '0')}</strong></div>
+            <div>Situation : <strong>${escapeHtml(rec.situation || '—')}</strong> ${rec.orientation ? `(Orientation : <strong>${escapeHtml(rec.orientation)}</strong>)` : ''}</div>
+          </div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
+  }
+
+  async function deleteSelectedStudent() {
+    const studentId = document.getElementById('student-select-dropdown').value;
+    const st = (appDb.students || []).find(s => s.id === studentId);
+    if (!st) return;
+    if (!confirm(`Voulez-vous vraiment supprimer la fiche complète de "${st.eleveNom}" ?`)) return;
+
+    const res = await fetch('/api/delete-student', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      appDb = data.db;
+      populateClassFilterDropdown();
+      populateStudentSelectDropdown();
+      renderSingleStudentFicha();
+      showToast("🗑️ Élève supprimé.");
+    }
+  }
+
+  async function deleteStudentYear(studentId, anneeScolaire, niveau) {
+    if (!confirm(`Supprimer le bulletin ${niveau} (${anneeScolaire}) de cet élève ?`)) return;
+    const res = await fetch('/api/delete-year', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ studentId, anneeScolaire, niveau })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      appDb = data.db;
+      populateClassFilterDropdown();
+      populateStudentSelectDropdown();
+      renderSingleStudentFicha();
+      showToast("🗑️ Année scolaire supprimée.");
+    }
+  }
+
+  // ===========================================================================
+  // SAISIE / EDITION MANUELLE
+  // ===========================================================================
+  function initManualForm() {
+    manualDisciplines = JSON.parse(JSON.stringify(DEFAULT_DISCIPLINES_9CO));
+    renderManualDisciplinesTable();
+  }
+
+  function renderManualDisciplinesTable() {
+    const tbody = document.getElementById('man-disciplines-tbody');
+    tbody.innerHTML = manualDisciplines.map((d, idx) => `
+      <tr>
+        <td><input type="text" value="${escapeHtml(d.discipline)}" style="width:100%;" oninput="manualDisciplines[${idx}].discipline = this.value"></td>
+        <td class="center"><input type="checkbox" ${d.principale ? 'checked' : ''} onchange="manualDisciplines[${idx}].principale = this.checked"></td>
+        <td class="center"><input type="text" class="grade-input" value="${escapeHtml(d.t1)}" oninput="manualDisciplines[${idx}].t1 = this.value"></td>
+        <td class="center"><input type="text" class="grade-input" value="${escapeHtml(d.t2)}" oninput="manualDisciplines[${idx}].t2 = this.value"></td>
+        <td class="center"><input type="text" class="grade-input" value="${escapeHtml(d.t3)}" oninput="manualDisciplines[${idx}].t3 = this.value"></td>
+        <td class="center"><input type="text" class="grade-input" value="${escapeHtml(d.moyenne)}" oninput="manualDisciplines[${idx}].moyenne = this.value"></td>
+        <td class="center"><button class="btn btn-danger btn-sm" onclick="manualDisciplines.splice(${idx},1); renderManualDisciplinesTable();">✕</button></td>
+      </tr>
+    `).join('');
+  }
+
+  function addManualDisciplineRow() {
+    manualDisciplines.push({ discipline: "", principale: false, t1: "", t2: "", t3: "", moyenne: "" });
+    renderManualDisciplinesTable();
+  }
+
+  function editSelectedStudentLatestYear() {
+    const studentId = document.getElementById('student-select-dropdown').value;
+    const st = (appDb.students || []).find(s => s.id === studentId);
+    if (!st || !st.history || st.history.length === 0) return;
+    loadYearIntoManualEditor(st.eleveNom, st.numEleve, st.history[st.history.length - 1]);
+  }
+
+  function loadYearIntoManualEditor(eleveNom, numEleve, rec) {
+    document.getElementById('man-eleveNom').value = eleveNom || '';
+    document.getElementById('man-numEleve').value = numEleve || '';
+    document.getElementById('man-anneeScolaire').value = rec.anneeScolaire || '';
+    document.getElementById('man-niveau').value = rec.niveau || '9CO';
+    document.getElementById('man-classe').value = rec.classe || '';
+    document.getElementById('man-regroupement').value = rec.regroupement || '';
+    document.getElementById('man-maitre').value = rec.maitre || '';
+    document.getElementById('man-situation').value = rec.situation || '';
+    document.getElementById('man-orientation').value = rec.orientation || '';
+    document.getElementById('man-moyPrincipales').value = rec.moyPrincipales || '';
+    document.getElementById('man-moyGenerale').value = rec.moyGenerale || '';
+    document.getElementById('man-absT1').value = rec.absT1 || '';
+    document.getElementById('man-absT2').value = rec.absT2 || '';
+    document.getElementById('man-absT3').value = rec.absT3 || '';
+    document.getElementById('man-absTotal').value = rec.absTotal || '';
+    manualDisciplines = JSON.parse(JSON.stringify(rec.disciplines || DEFAULT_DISCIPLINES_9CO));
+    renderManualDisciplinesTable();
+    switchView('manual');
+  }
+
+  async function saveManualBulletin() {
+    const eleveNom = document.getElementById('man-eleveNom').value.trim();
+    if (!eleveNom) {
+      alert("Veuillez saisir le Nom et Prénom de l'élève.");
+      return;
+    }
+    const b = {
+      eleveNom,
+      numEleve: document.getElementById('man-numEleve').value.trim(),
+      anneeScolaire: document.getElementById('man-anneeScolaire').value.trim(),
+      niveau: document.getElementById('man-niveau').value,
+      classe: document.getElementById('man-classe').value.trim(),
+      regroupement: document.getElementById('man-regroupement').value.trim(),
+      maitre: document.getElementById('man-maitre').value.trim(),
+      situation: document.getElementById('man-situation').value.trim(),
+      orientation: document.getElementById('man-orientation').value.trim(),
+      moyPrincipales: document.getElementById('man-moyPrincipales').value.trim(),
+      moyGenerale: document.getElementById('man-moyGenerale').value.trim(),
+      absT1: document.getElementById('man-absT1').value.trim(),
+      absT2: document.getElementById('man-absT2').value.trim(),
+      absT3: document.getElementById('man-absT3').value.trim(),
+      absTotal: document.getElementById('man-absTotal').value.trim(),
+      disciplines: manualDisciplines.filter(d => d.discipline && d.discipline.trim() !== '')
+    };
+
+    showLoader("Enregistrement du bulletin…");
+    const res = await fetch('/api/save-bulletins', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ bulletins: [b] })
+    });
+    const data = await res.json();
+    hideLoader();
+    if (data.ok) {
+      appDb = data.db;
+      populateClassFilterDropdown();
+      populateStudentSelectDropdown();
+      switchView('cohort');
+      showToast("✅ Bulletin enregistré avec succès !");
+    }
+  }
+
+  // ===========================================================================
+  // EXPORT EXCEL (.XLSX)
+  // ===========================================================================
+  async function exportCurrentCohortExcel() {
+    if (!appDb.students || appDb.students.length === 0) {
+      alert("Aucun élève n'est encore enregistré dans la base. Importez d'abord un bulletin PDF.");
+      return;
+    }
+    const classe = document.getElementById('cohort-class-filter').value || 'TOUTES';
+    showLoader("Génération du rapport Excel (.xlsx) multi-feuilles…");
+    try {
+      const res = await fetch('/api/export-excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ classe, openAfter: true })
+      });
+      const data = await res.json();
+      hideLoader();
+      if (data.cancelled) return;
+      if (data.ok) {
+        showToast("📗 Rapport Excel (.xlsx) généré et ouvert !");
+      } else {
+        alert("Erreur lors de l'export Excel : " + data.error);
+      }
+    } catch (e) {
+      hideLoader();
+      alert("Erreur : " + e.message);
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    initManualForm();
+    loadDatabaseFromServer();
+  });
+</script>
+</body>
+</html>
