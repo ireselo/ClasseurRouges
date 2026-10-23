@@ -448,7 +448,7 @@
 
     <nav class="nav-menu">
       <button class="nav-btn active" onclick="switchView('import')" id="nav-import">
-        📄 Importer des Bulletins (PDF)
+        📄 Importer (PDF / XML / CSV)
       </button>
       <button class="nav-btn" onclick="switchView('cohort')" id="nav-cohort">
         📊 Vue Classe / Cohorte (3 ans)
@@ -470,9 +470,9 @@
   <!-- Main Area -->
   <main class="main">
     <header class="topbar">
-      <div class="topbar-title" id="topbar-title">Importation et Vérification des Bulletins Scolaires</div>
+      <div class="topbar-title" id="topbar-title">Importation et Vérification des Données Scolaires</div>
       <div class="topbar-actions">
-        <button class="btn btn-secondary" onclick="triggerImportDialog()">📂 Charger PDF(s)</button>
+        <button class="btn btn-secondary" onclick="triggerImportDialog()">📂 Importer (PDF / XML / CSV)</button>
         <button class="btn btn-success" onclick="exportCurrentCohortExcel()">📗 Exporter le Rapport Excel (.xlsx)</button>
       </div>
     </header>
@@ -480,17 +480,17 @@
     <div class="content">
 
       <!-- ===================================================================== -->
-      <!-- VUE 1 : IMPORTATION & VERIFICATION DE BULLETINS PDF                   -->
+      <!-- VUE 1 : IMPORTATION & VERIFICATION DE BULLETINS (PDF / XML / CSV)     -->
       <!-- ===================================================================== -->
       <section class="view-section active" id="view-import">
         <div class="dropzone" id="dropzone" onclick="triggerImportDialog()">
-          <h3>📥 Importer un ou plusieurs Bulletins Scolaires (PDF)</h3>
-          <p>Compatible avec les PDFs multi-pages d'une classe entière ET les PDFs individuels par élève (T1, T2 ou T3).<br>
-             Glissez-déposez vos fichiers PDF ici ou cliquez pour parcourir votre ordinateur.</p>
+          <h3>📥 Importer des Documents Scolaires (XML Notes/Absences, Excel/CSV Professeurs ou Bulletins PDF)</h3>
+          <p>Vous pouvez sélectionner simultanément ou séparément les fichiers <strong>XML de notes</strong>, <strong>XML d'absences</strong> et <strong>Excel (.xls / .xlsx) ou CSV des professeurs</strong>, ainsi que vos <strong>Bulletins PDF</strong>.<br>
+             Glissez-déposez vos fichiers ici ou cliquez pour parcourir votre ordinateur.</p>
           <button class="btn btn-primary" onclick="event.stopPropagation(); triggerImportDialog();">
-            Sélectionner des fichiers PDF…
+            Sélectionner des fichiers (PDF, XML, Excel .xls/.xlsx, CSV)…
           </button>
-          <input type="file" id="file-input-fallback" accept=".pdf" multiple style="display:none" onchange="handleFileInputChange(event)">
+          <input type="file" id="file-input-fallback" accept=".pdf,.xml,.xls,.xlsx,.csv,.txt" multiple style="display:none" onchange="handleFileInputChange(event)">
         </div>
 
         <div id="review-container" style="display:none;">
@@ -509,9 +509,9 @@
               </div>
             </div>
 
-            <div class="review-layout">
+            <div class="review-layout" id="review-layout-grid">
               <!-- Apercu visuel de la page PDF -->
-              <div class="preview-box">
+              <div class="preview-box" id="review-preview-box">
                 <div style="color:#CBD5E1; font-size:12px; margin-bottom:8px; font-weight:600;">Aperçu du Bulletin Original</div>
                 <img id="review-preview-img" src="" alt="Aperçu du bulletin">
               </div>
@@ -650,9 +650,10 @@
 
         <div class="card">
           <div class="card-header">
-            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-              <span class="card-title">Filtrer par Cohorte / Classe :</span>
-              <select id="cohort-class-filter" onchange="renderCohortView()" style="min-width:190px; font-weight:600;"></select>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <span class="card-title">Filtrer par :</span>
+              <select id="cohort-year-filter" onchange="onCohortYearFilterChange()" style="min-width:175px; font-weight:600;"></select>
+              <select id="cohort-class-filter" onchange="onCohortClassFilterChange()" style="min-width:190px; font-weight:600;"></select>
               <select id="cohort-view-mode" onchange="renderCohortView()">
                 <option value="SYNTHESE">Vue Synthèse des 3 ans (9CO • 10CO • 11CO)</option>
                 <option value="9CO">Détail toutes matières — 9e année (9CO)</option>
@@ -662,7 +663,7 @@
               <input type="text" id="cohort-search" placeholder="🔍 Rechercher un élève..." oninput="renderCohortView()">
             </div>
             <button class="btn btn-success" onclick="exportCurrentCohortExcel()">
-              📗 Générer le Classeur Excel (.xlsx) de cette classe
+              📗 Générer le Classeur Excel (.xlsx)
             </button>
           </div>
 
@@ -676,9 +677,12 @@
       <section class="view-section" id="view-students">
         <div class="card">
           <div class="card-header">
-            <div style="display:flex; align-items:center; gap:12px;">
-              <span class="card-title">Sélectionner un élève :</span>
-              <select id="student-select-dropdown" onchange="renderSingleStudentFicha()" style="min-width:280px; font-weight:600;"></select>
+            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+              <span class="card-title">Filtrer :</span>
+              <select id="student-year-filter" onchange="onStudentYearFilterChange()" style="min-width:155px; font-weight:600;"></select>
+              <select id="student-class-filter" onchange="onStudentClassFilterChange()" style="min-width:165px; font-weight:600;"></select>
+              <span class="card-title" style="margin-left:4px;">Élève :</span>
+              <select id="student-select-dropdown" onchange="renderSingleStudentFicha()" style="min-width:260px; font-weight:600;"></select>
             </div>
             <div style="display:flex; gap:8px;">
               <button class="btn btn-secondary btn-sm" onclick="editSelectedStudentLatestYear()">✏️ Modifier ses notes</button>
@@ -831,7 +835,7 @@
     document.getElementById('nav-' + viewName).classList.add('active');
 
     const titles = {
-      import: "Importation et Vérification des Bulletins Scolaires (PDF)",
+      import: "Importation et Vérification des Données Scolaires (PDF / XML / CSV)",
       cohort: "Suivi Pluriannuel par Classe / Cohorte (9CO • 10CO • 11CO)",
       students: "Fiches Individuelles de Suivi Longitudinal",
       manual: "Saisie et Édition Manuelle d'un Bulletin"
@@ -871,18 +875,32 @@
   });
 
   async function triggerImportDialog() {
-    showLoader("Ouverture de la sélection et extraction des bulletins PDF…");
+    showLoader("Ouverture de la sélection et analyse des documents…");
     try {
       const res = await fetch('/api/pick-pdfs', { method: 'POST' });
       const data = await res.json();
       hideLoader();
       if (data.cancelled) return;
+      if (data.db) {
+        appDb = data.db;
+        populateClassFilterDropdown();
+        populateStudentSelectDropdown();
+      }
       if (data.ok && data.bulletins && data.bulletins.length > 0) {
         reviewList = data.bulletins;
         reviewIndex = 0;
         switchView('import');
         renderReviewScreen();
-        showToast(`✅ ${reviewList.length} bulletin(s) extrait(s) avec succès !`);
+        showToast(`✅ ${reviewList.length} bulletin(s) PDF extrait(s) !`);
+      } else if (data.ok && data.autoSavedCount > 0) {
+        reviewList = [];
+        document.getElementById('review-container').style.display = 'none';
+        switchView('cohort');
+        showToast(`✅ ${data.autoSavedCount} élève(s) importé(s) et enregistré(s) automatiquement !`);
+      } else if (data.ok && data.teachersParsedCount > 0) {
+        renderCohortView();
+        renderSingleStudentFicha();
+        showToast(`✅ Liste des professeurs importée et associée aux classes !`);
       } else {
         document.getElementById('file-input-fallback').click();
       }
@@ -900,7 +918,7 @@
   }
 
   async function uploadPdfFilesViaBrowser(fileList) {
-    showLoader(`Analyse de ${fileList.length} fichier(s) PDF…`);
+    showLoader(`Analyse et importation automatique de ${fileList.length} fichier(s)…`);
     try {
       const filesPayload = [];
       for (const f of fileList) {
@@ -919,14 +937,28 @@
       });
       const data = await res.json();
       hideLoader();
+      if (data.db) {
+        appDb = data.db;
+        populateClassFilterDropdown();
+        populateStudentSelectDropdown();
+      }
       if (data.ok && data.bulletins && data.bulletins.length > 0) {
         reviewList = data.bulletins;
         reviewIndex = 0;
         switchView('import');
         renderReviewScreen();
-        showToast(`✅ ${reviewList.length} bulletin(s) extrait(s) !`);
+        showToast(`✅ ${reviewList.length} bulletin(s) PDF extrait(s) !`);
+      } else if (data.ok && data.autoSavedCount > 0) {
+        reviewList = [];
+        document.getElementById('review-container').style.display = 'none';
+        switchView('cohort');
+        showToast(`✅ ${data.autoSavedCount} élève(s) importé(s) et enregistré(s) automatiquement !`);
+      } else if (data.ok && data.teachersParsedCount > 0) {
+        renderCohortView();
+        renderSingleStudentFicha();
+        showToast(`✅ Liste des professeurs importée et associée aux classes !`);
       } else {
-        alert("Erreur lors de l'extraction : " + (data.error || "Aucun bulletin détecté"));
+        alert("Erreur lors de l'extraction : " + (data.error || "Aucune donnée détectée"));
       }
     } catch (err) {
       hideLoader();
@@ -972,13 +1004,23 @@
     container.style.display = 'block';
     const b = reviewList[reviewIndex];
 
-    document.getElementById('review-counter').textContent = `Vérification du bulletin ${reviewIndex + 1} sur ${reviewList.length}`;
-    document.getElementById('review-source-file').textContent = `(${b.sourceFile || 'PDF'} — Page ${b.pageNumber || 1})`;
+    document.getElementById('review-counter').textContent = `Vérification du dossier ${reviewIndex + 1} sur ${reviewList.length}`;
+    document.getElementById('review-source-file').textContent = `(${b.sourceFile || 'Document'} — #${b.pageNumber || 1})`;
     document.getElementById('btn-save-count').textContent = reviewList.length;
     document.getElementById('btn-prev-page').disabled = (reviewIndex === 0);
     document.getElementById('btn-next-page').disabled = (reviewIndex === reviewList.length - 1);
 
-    document.getElementById('review-preview-img').src = b.previewImage || '';
+    const previewBox = document.getElementById('review-preview-box');
+    const layoutGrid = document.getElementById('review-layout-grid');
+    if (b.previewImage) {
+      previewBox.style.display = 'block';
+      layoutGrid.style.gridTemplateColumns = '440px 1fr';
+      document.getElementById('review-preview-img').src = b.previewImage;
+    } else {
+      previewBox.style.display = 'none';
+      layoutGrid.style.gridTemplateColumns = '1fr';
+      document.getElementById('review-preview-img').src = '';
+    }
     document.getElementById('rev-eleveNom').value = b.eleveNom || '';
     document.getElementById('rev-numEleve').value = b.numEleve || '';
     document.getElementById('rev-anneeScolaire').value = b.anneeScolaire || '';
@@ -1005,8 +1047,10 @@
     tbody.innerHTML = b.disciplines.map((d, idx) => `
       <tr>
         <td>
-          <input type="text" value="${escapeHtml(d.discipline)}" style="width:100%; font-weight:${d.principale ? '700' : '400'};"
+          <input type="text" value="${escapeHtml(d.discipline)}" placeholder="Nom de la matière" style="width:100%; font-weight:${d.principale ? '700' : '400'};"
                  oninput="updateReviewDisc(${idx}, 'discipline', this.value)">
+          <input type="text" value="${escapeHtml(d.professeur || '')}" placeholder="Professeur(s) de la matière" style="width:100%; margin-top:4px; font-size:11.5px; color:var(--slate-600); padding:4px 8px;"
+                 oninput="updateReviewDisc(${idx}, 'professeur', this.value)">
         </td>
         <td class="center">
           <input type="checkbox" ${d.principale ? 'checked' : ''} onchange="updateReviewDisc(${idx}, 'principale', this.checked)">
@@ -1039,6 +1083,30 @@
     reviewList[reviewIndex][field] = val;
   }
 
+  function computeCountingAvgJs(vals) {
+    let sum = 0, count = 0;
+    for (const v of vals) {
+      if (!v) continue;
+      const s = String(v).trim();
+      if (s.startsWith('(') || /^(C\.M|Disp|N\.E)/i.test(s)) continue;
+      const n = parseFloat(s.replace(',', '.'));
+      if (!isNaN(n)) { sum += n; count++; }
+    }
+    if (count === 0) return "";
+    return (Math.round(((sum / count) + 1e-9) * 10) / 10).toFixed(1);
+  }
+
+  function recalculateCurrentReviewAverages() {
+    const b = reviewList[reviewIndex];
+    if (!b || !Array.isArray(b.disciplines)) return;
+    const princMoys = b.disciplines.filter(d => d.principale && d.moyenne).map(d => d.moyenne);
+    const allMoys = b.disciplines.filter(d => d.moyenne).map(d => d.moyenne);
+    b.moyPrincipales = computeCountingAvgJs(princMoys);
+    b.moyGenerale = computeCountingAvgJs(allMoys);
+    document.getElementById('rev-moyPrincipales').value = b.moyPrincipales || '';
+    document.getElementById('rev-moyGenerale').value = b.moyGenerale || '';
+  }
+
   function updateReviewDisc(idx, field, val, inputEl) {
     const d = reviewList[reviewIndex].disciplines[idx];
     if (!d) return;
@@ -1046,14 +1114,22 @@
     if (inputEl) {
       if (isInsufficientGrade(val)) inputEl.classList.add('low');
       else inputEl.classList.remove('low');
+      if (field === 't1' || field === 't2' || field === 't3') {
+        d.moyenne = computeCountingAvgJs([d.t1, d.t2, d.t3]);
+        recalculateCurrentReviewAverages();
+        renderReviewDisciplinesTable();
+      } else if (field === 'moyenne') {
+        recalculateCurrentReviewAverages();
+      }
     } else if (field === 'principale') {
+      recalculateCurrentReviewAverages();
       renderReviewDisciplinesTable();
     }
   }
 
   function addDisciplineRowToReview() {
     reviewList[reviewIndex].disciplines.push({
-      discipline: "", principale: false, t1: "", t2: "", t3: "", moyenne: ""
+      discipline: "", professeur: "", principale: false, t1: "", t2: "", t3: "", moyenne: ""
     });
     renderReviewDisciplinesTable();
   }
@@ -1113,59 +1189,156 @@
   }
 
   // ===========================================================================
-  // VUE COHORTE / CLASSE PLURIANNUELLE
+  // VUE COHORTE / CLASSE PLURIANNUELLE (FILTRE PAR ANNEE SCOLAIRE & CLASSE)
   // ===========================================================================
-  function populateClassFilterDropdown() {
-    const sel = document.getElementById('cohort-class-filter');
-    const prevVal = sel.value;
-    const classesSet = new Set();
+  function getAllDistinctSchoolYears() {
+    const yearsMap = new Map();
     (appDb.students || []).forEach(st => {
-      if (st.classeActuelle) classesSet.add(st.classeActuelle);
-      (st.history || []).forEach(h => { if (h.classe) classesSet.add(h.classe); });
+      (st.history || []).forEach(h => {
+        if (h.anneeScolaire) {
+          yearsMap.set(h.anneeScolaire, (yearsMap.get(h.anneeScolaire) || 0) + 1);
+        }
+      });
     });
-    const sortedClasses = Array.from(classesSet).sort();
-    let html = `<option value="TOUTES">Toutes les classes (${(appDb.students || []).length} élèves)</option>`;
-    sortedClasses.forEach(c => {
-      html += `<option value="${escapeHtml(c)}">Classe / Cohorte ${escapeHtml(c)}</option>`;
+    return Array.from(yearsMap.entries())
+      .sort((a, b) => b[0].localeCompare(a[0])) // Plus récent en premier
+      .map(([yr, count]) => ({ yr, count }));
+  }
+
+  function populateYearDropdownElement(selEl, defaultToLatest = true) {
+    if (!selEl) return;
+    const prevVal = selEl.value;
+    const yearsList = getAllDistinctSchoolYears();
+    const yearsSet = new Set(yearsList.map(x => x.yr));
+
+    let html = `<option value="TOUTES">Toutes les années (${(appDb.students || []).length} élèves)</option>`;
+    yearsList.forEach(({ yr, count }) => {
+      html += `<option value="${escapeHtml(yr)}">Année ${escapeHtml(yr)} (${count} élèves)</option>`;
     });
-    sel.innerHTML = html;
-    if (prevVal && (prevVal === 'TOUTES' || classesSet.has(prevVal))) {
-      sel.value = prevVal;
+    selEl.innerHTML = html;
+
+    if (prevVal && (prevVal === 'TOUTES' || yearsSet.has(prevVal))) {
+      selEl.value = prevVal;
+    } else if (defaultToLatest && yearsList.length > 0) {
+      selEl.value = yearsList[0].yr;
+    } else {
+      selEl.value = 'TOUTES';
     }
   }
 
-  function getFilteredCohortStudents() {
+  function populateClassesForYearDropdown(yearVal, classSelEl) {
+    if (!classSelEl) return;
+    const prevCls = classSelEl.value;
+    const classCounts = new Map();
+    let totalInYear = 0;
+
+    (appDb.students || []).forEach(st => {
+      const matchingHist = (st.history || []).filter(h => (yearVal === 'TOUTES') || (h.anneeScolaire === yearVal));
+      if (matchingHist.length > 0) {
+        totalInYear++;
+        const seenClsForSt = new Set();
+        matchingHist.forEach(h => {
+          if (h.classe && !seenClsForSt.has(h.classe)) {
+            seenClsForSt.add(h.classe);
+            classCounts.set(h.classe, (classCounts.get(h.classe) || 0) + 1);
+          }
+        });
+      }
+    });
+
+    const sortedClasses = Array.from(classCounts.keys()).sort();
+    const allLabel = (yearVal === 'TOUTES')
+      ? `Toutes les classes (${totalInYear} élèves)`
+      : `Toutes les classes de ${escapeHtml(yearVal)} (${totalInYear} élèves)`;
+
+    let html = `<option value="TOUTES">${allLabel}</option>`;
+    sortedClasses.forEach(c => {
+      const cnt = classCounts.get(c) || 0;
+      html += `<option value="${escapeHtml(c)}">Classe ${escapeHtml(c)} (${cnt} élève${cnt > 1 ? 's' : ''})</option>`;
+    });
+    classSelEl.innerHTML = html;
+
+    if (prevCls && (prevCls === 'TOUTES' || classCounts.has(prevCls))) {
+      classSelEl.value = prevCls;
+    } else {
+      classSelEl.value = 'TOUTES';
+    }
+  }
+
+  function populateClassFilterDropdown() {
+    const yrSel = document.getElementById('cohort-year-filter');
+    const clsSel = document.getElementById('cohort-class-filter');
+    populateYearDropdownElement(yrSel, true);
+    populateClassesForYearDropdown(yrSel ? yrSel.value : 'TOUTES', clsSel);
+  }
+
+  function onCohortYearFilterChange() {
+    const yr = document.getElementById('cohort-year-filter').value || 'TOUTES';
+    const clsSel = document.getElementById('cohort-class-filter');
+    populateClassesForYearDropdown(yr, clsSel);
+    renderCohortView();
+  }
+
+  function onCohortClassFilterChange() {
     const cls = document.getElementById('cohort-class-filter').value || 'TOUTES';
+    const modeSel = document.getElementById('cohort-view-mode');
+    if (cls !== 'TOUTES' && modeSel && modeSel.value !== 'SYNTHESE') {
+      if (/^0?9/.test(cls)) modeSel.value = '9CO';
+      else if (/^10/.test(cls)) modeSel.value = '10CO';
+      else if (/^11/.test(cls)) modeSel.value = '11CO';
+    }
+    renderCohortView();
+  }
+
+  function getStudentRecordForFilter(st, yr, cls) {
+    const hist = st.history || [];
+    if (hist.length === 0) return null;
+    const matches = hist.filter(h =>
+      (yr === 'TOUTES' || h.anneeScolaire === yr) &&
+      (cls === 'TOUTES' || h.classe === cls)
+    );
+    if (matches.length > 0) return matches[matches.length - 1];
+    return null;
+  }
+
+  function getFilteredCohortStudents() {
+    const yrEl = document.getElementById('cohort-year-filter');
+    const clsEl = document.getElementById('cohort-class-filter');
+    const yr = (yrEl && yrEl.value) ? yrEl.value : 'TOUTES';
+    const cls = (clsEl && clsEl.value) ? clsEl.value : 'TOUTES';
     const q = (document.getElementById('cohort-search').value || '').trim().toLowerCase();
+
     return (appDb.students || []).filter(st => {
-      const inCls = (cls === 'TOUTES') || (st.classeActuelle === cls) ||
-                    (st.history || []).some(h => h.classe === cls);
-      if (!inCls) return false;
+      const rec = getStudentRecordForFilter(st, yr, cls);
+      if (!rec) return false;
       if (!q) return true;
       return (st.eleveNom || '').toLowerCase().includes(q) ||
              (st.numEleve || '').toLowerCase().includes(q) ||
-             (st.classeActuelle || '').toLowerCase().includes(q);
+             (rec.classe || '').toLowerCase().includes(q);
     });
   }
 
   function renderCohortView() {
+    const yrEl = document.getElementById('cohort-year-filter');
+    const clsEl = document.getElementById('cohort-class-filter');
+    const yr = (yrEl && yrEl.value) ? yrEl.value : 'TOUTES';
+    const cls = (clsEl && clsEl.value) ? clsEl.value : 'TOUTES';
     const students = getFilteredCohortStudents();
     const mode = document.getElementById('cohort-view-mode').value || 'SYNTHESE';
 
-    // Update KPIs
+    // Update KPIs based on the selected year/class record
     document.getElementById('kpi-total-students').textContent = students.length;
     let sumMoy = 0, countMoy = 0, alerts = 0, totalAbs = 0;
     students.forEach(st => {
-      const hist = st.history || [];
-      if (hist.length > 0) {
-        const latest = hist[hist.length - 1];
-        const mg = parseFloat(String(latest.moyGenerale || '').replace(',', '.'));
-        const mp = parseFloat(String(latest.moyPrincipales || '').replace(',', '.'));
+      const targetRec = getStudentRecordForFilter(st, yr, cls) || (st.history || [])[(st.history || []).length - 1];
+      if (targetRec) {
+        const mg = parseFloat(String(targetRec.moyGenerale || '').replace(',', '.'));
+        const mp = parseFloat(String(targetRec.moyPrincipales || '').replace(',', '.'));
         if (!isNaN(mg)) { sumMoy += mg; countMoy++; }
-        if ((!isNaN(mg) && mg < 4.0) || (!isNaN(mp) && mp < 4.0) || /tolérance|non promu/i.test(latest.situation || '')) {
+        if ((!isNaN(mg) && mg < 4.0) || (!isNaN(mp) && mp < 4.0) || /tolérance|non promu/i.test(targetRec.situation || '')) {
           alerts++;
         }
-        const ab = parseInt(latest.absTotal, 10);
+        const ab = parseInt(targetRec.absTotal, 10);
         if (!isNaN(ab)) totalAbs += ab;
       }
     });
@@ -1176,19 +1349,20 @@
     const container = document.getElementById('cohort-table-container');
     if (students.length === 0) {
       container.innerHTML = `<div style="padding:32px; text-align:center; color:var(--slate-500);">
-        Aucun élève enregistré dans cette sélection. Cliquez sur <strong>Charger PDF(s)</strong> pour importer des bulletins.
+        Aucun élève enregistré dans cette sélection. Cliquez sur <strong>Importer (PDF / XML / CSV)</strong> pour importer des données.
       </div>`;
       return;
     }
 
     if (mode === 'SYNTHESE') {
-      renderCohortSyntheseTable(container, students);
+      renderCohortSyntheseTable(container, students, yr, cls);
     } else {
-      renderCohortLevelDetailTable(container, students, mode);
+      renderCohortLevelDetailTable(container, students, mode, yr, cls);
     }
   }
 
-  function renderCohortSyntheseTable(container, students) {
+  function renderCohortSyntheseTable(container, students, yr = 'TOUTES', cls = 'TOUTES') {
+    const col3Header = (yr !== 'TOUTES') ? `Classe (${escapeHtml(yr)})` : 'Classe Act.';
     let html = `<table>
       <thead>
         <tr>
@@ -1201,7 +1375,7 @@
         <tr>
           <th>Nom et Prénom</th>
           <th class="center">N° Élève</th>
-          <th class="center">Classe Act.</th>
+          <th class="center">${col3Header}</th>
           <th class="center">Classe 9e</th>
           <th class="center">Moy.P</th>
           <th class="center">Moy.G</th>
@@ -1227,6 +1401,8 @@
       const levelCounts = {};
       hist.forEach(h => { levelCounts[h.niveau] = (levelCounts[h.niveau] || 0) + 1; });
       const isRedoublant = Object.values(levelCounts).some(c => c > 1);
+      const filteredRec = getStudentRecordForFilter(st, yr, cls);
+      const displayedClasse = filteredRec ? filteredRec.classe : (st.classeActuelle || '—');
 
       html += `<tr>
         <td>
@@ -1236,7 +1412,7 @@
           ${isRedoublant ? ' <span class="badge badge-amber" title="Redoublement enregistré">Redoubl.</span>' : ''}
         </td>
         <td class="center">${escapeHtml(st.numEleve || '—')}</td>
-        <td class="center"><span class="badge badge-slate">${escapeHtml(st.classeActuelle || '—')}</span></td>`;
+        <td class="center"><span class="badge badge-slate">${escapeHtml(displayedClasse || '—')}</span></td>`;
 
       ['9CO', '10CO', '11CO'].forEach(niv => {
         const recs = hist.filter(h => h.niveau === niv);
@@ -1247,7 +1423,9 @@
                    <td class="center" style="color:#CBD5E1;">—</td>
                    <td style="color:#CBD5E1;">—</td>`;
         } else {
-          const r = recs[recs.length - 1];
+          const r = (yr !== 'TOUTES' && recs.some(x => x.anneeScolaire === yr))
+            ? recs.find(x => x.anneeScolaire === yr)
+            : recs[recs.length - 1];
           const clsLabel = recs.length > 1
             ? recs.map(x => `${x.classe} (${x.anneeScolaire})`).join(' / ')
             : `${r.classe || ''} <span style="color:var(--slate-500); font-size:11px;">(${r.anneeScolaire || ''})</span>`;
@@ -1275,16 +1453,34 @@
     container.innerHTML = html;
   }
 
-  function renderCohortLevelDetailTable(container, students, niv) {
-    // Collect all distinct disciplines for this level
-    const discList = [];
+  function renderCohortLevelDetailTable(container, students, niv, yr = 'TOUTES', cls = 'TOUTES') {
+    const matchingStudentRecs = [];
     students.forEach(st => {
-      (st.history || []).filter(h => h.niveau === niv).forEach(h => {
-        (h.disciplines || []).forEach(d => {
-          if (d.discipline && !discList.some(x => x.toLowerCase() === d.discipline.toLowerCase())) {
-            discList.push(d.discipline);
-          }
-        });
+      const recs = (st.history || []).filter(h => {
+        if (h.niveau !== niv) return false;
+        // If the filtered class belongs to this level, restrict to selected year & class
+        if (cls !== 'TOUTES') {
+          const clsIsThisLevel = (niv === '9CO' && /^0?9/.test(cls)) ||
+                                 (niv === '10CO' && /^10/.test(cls)) ||
+                                 (niv === '11CO' && /^11/.test(cls));
+          if (clsIsThisLevel && h.classe !== cls) return false;
+          if (clsIsThisLevel && yr !== 'TOUTES' && h.anneeScolaire !== yr) return false;
+        } else if (yr !== 'TOUTES') {
+          // If viewing all classes for a given year, show records from that year if any student in selection has this level in that year
+          const anyInYr = students.some(s => (s.history || []).some(hh => hh.niveau === niv && hh.anneeScolaire === yr));
+          if (anyInYr && h.anneeScolaire !== yr) return false;
+        }
+        return true;
+      });
+      recs.forEach(r => matchingStudentRecs.push({ st, r }));
+    });
+
+    const discList = [];
+    matchingStudentRecs.forEach(({ r }) => {
+      (r.disciplines || []).forEach(d => {
+        if (d.discipline && !discList.some(x => x.toLowerCase() === d.discipline.toLowerCase())) {
+          discList.push(d.discipline);
+        }
       });
     });
 
@@ -1306,35 +1502,30 @@
       </thead>
       <tbody>`;
 
-    let rowCount = 0;
-    students.forEach(st => {
-      const recs = (st.history || []).filter(h => h.niveau === niv);
-      recs.forEach(r => {
-        rowCount++;
-        html += `<tr>
-          <td><a href="javascript:void(0)" onclick="openStudentFicha('${st.id}')" style="font-weight:700; color:var(--slate-900); text-decoration:none;">${escapeHtml(st.eleveNom)}</a></td>
-          <td class="center">${escapeHtml(r.anneeScolaire)}</td>
-          <td class="center"><span class="badge badge-slate">${escapeHtml(r.classe)}</span></td>
-          <td class="center">${formatGradeCellHtml(r.moyPrincipales, true)}</td>
-          <td class="center">${formatGradeCellHtml(r.moyGenerale, true)}</td>
-          <td class="center"><strong>${escapeHtml(r.absTotal || '—')}</strong></td>`;
+    matchingStudentRecs.forEach(({ st, r }) => {
+      html += `<tr>
+        <td><a href="javascript:void(0)" onclick="openStudentFicha('${st.id}')" style="font-weight:700; color:var(--slate-900); text-decoration:none;">${escapeHtml(st.eleveNom)}</a></td>
+        <td class="center">${escapeHtml(r.anneeScolaire)}</td>
+        <td class="center"><span class="badge badge-slate">${escapeHtml(r.classe)}</span></td>
+        <td class="center">${formatGradeCellHtml(r.moyPrincipales, true)}</td>
+        <td class="center">${formatGradeCellHtml(r.moyGenerale, true)}</td>
+        <td class="center"><strong>${escapeHtml(r.absTotal || '—')}</strong></td>`;
 
-        discList.forEach(dName => {
-          const found = (r.disciplines || []).find(x => (x.discipline || '').toLowerCase() === dName.toLowerCase());
-          if (!found) {
-            html += `<td class="center">—</td><td class="center">—</td><td class="center">—</td><td class="center" style="background:#F8FAFC;">—</td>`;
-          } else {
-            html += `<td class="center">${formatGradeCellHtml(found.t1)}</td>
-                     <td class="center">${formatGradeCellHtml(found.t2)}</td>
-                     <td class="center">${formatGradeCellHtml(found.t3)}</td>
-                     <td class="center" style="background:#F8FAFC;">${formatGradeCellHtml(found.moyenne, true)}</td>`;
-          }
-        });
-        html += `</tr>`;
+      discList.forEach(dName => {
+        const found = (r.disciplines || []).find(x => (x.discipline || '').toLowerCase() === dName.toLowerCase());
+        if (!found) {
+          html += `<td class="center">—</td><td class="center">—</td><td class="center">—</td><td class="center" style="background:#F8FAFC;">—</td>`;
+        } else {
+          html += `<td class="center">${formatGradeCellHtml(found.t1)}</td>
+                   <td class="center">${formatGradeCellHtml(found.t2)}</td>
+                   <td class="center">${formatGradeCellHtml(found.t3)}</td>
+                   <td class="center" style="background:#F8FAFC;">${formatGradeCellHtml(found.moyenne, true)}</td>`;
+        }
       });
+      html += `</tr>`;
     });
 
-    if (rowCount === 0) {
+    if (matchingStudentRecs.length === 0) {
       html += `<tr><td colspan="${6 + discList.length * 4}" class="center" style="padding:24px; color:var(--slate-500);">Aucun bulletin enregistré pour le niveau ${niv} dans cette sélection.</td></tr>`;
     }
     html += `</tbody></table>`;
@@ -1342,21 +1533,73 @@
   }
 
   // ===========================================================================
-  // VUE FICHE INDIVIDUELLE ELEVE (3 ANS)
+  // VUE FICHE INDIVIDUELLE ELEVE (3 ANS) AVEC FILTRE ANNEE & CLASSE
   // ===========================================================================
-  function populateStudentSelectDropdown() {
+  function refreshStudentDropdownOptions() {
+    const yrEl = document.getElementById('student-year-filter');
+    const clsEl = document.getElementById('student-class-filter');
     const sel = document.getElementById('student-select-dropdown');
+    if (!sel) return;
+
+    const yr = (yrEl && yrEl.value) ? yrEl.value : 'TOUTES';
+    const cls = (clsEl && clsEl.value) ? clsEl.value : 'TOUTES';
     const prev = sel.value;
-    const list = appDb.students || [];
-    sel.innerHTML = list.map(st =>
-      `<option value="${st.id}">${escapeHtml(st.eleveNom)} — Classe ${escapeHtml(st.classeActuelle || '?')} (N° ${escapeHtml(st.numEleve || '—')})</option>`
-    ).join('');
-    if (prev && list.some(s => s.id === prev)) sel.value = prev;
+
+    const filteredList = (appDb.students || []).filter(st => getStudentRecordForFilter(st, yr, cls) !== null);
+    sel.innerHTML = filteredList.map(st => {
+      const rec = getStudentRecordForFilter(st, yr, cls);
+      const clsBadge = rec ? `${rec.classe} (${rec.anneeScolaire})` : (st.classeActuelle || '?');
+      return `<option value="${st.id}">${escapeHtml(st.eleveNom)} — Classe ${escapeHtml(clsBadge)} (N° ${escapeHtml(st.numEleve || '—')})</option>`;
+    }).join('');
+
+    if (prev && filteredList.some(s => s.id === prev)) {
+      sel.value = prev;
+    } else if (filteredList.length > 0) {
+      sel.value = filteredList[0].id;
+    }
+  }
+
+  function populateStudentSelectDropdown() {
+    const yrEl = document.getElementById('student-year-filter');
+    const clsEl = document.getElementById('student-class-filter');
+    populateYearDropdownElement(yrEl, false);
+    populateClassesForYearDropdown(yrEl ? yrEl.value : 'TOUTES', clsEl);
+    refreshStudentDropdownOptions();
+  }
+
+  function onStudentYearFilterChange() {
+    const yrEl = document.getElementById('student-year-filter');
+    const clsEl = document.getElementById('student-class-filter');
+    populateClassesForYearDropdown(yrEl ? yrEl.value : 'TOUTES', clsEl);
+    refreshStudentDropdownOptions();
+    renderSingleStudentFicha();
+  }
+
+  function onStudentClassFilterChange() {
+    refreshStudentDropdownOptions();
+    renderSingleStudentFicha();
   }
 
   function openStudentFicha(studentId) {
-    populateStudentSelectDropdown();
-    document.getElementById('student-select-dropdown').value = studentId;
+    const yrEl = document.getElementById('student-year-filter');
+    const clsEl = document.getElementById('student-class-filter');
+    const cohYr = document.getElementById('cohort-year-filter');
+    const cohCls = document.getElementById('cohort-class-filter');
+
+    populateYearDropdownElement(yrEl, false);
+    if (cohYr && yrEl) yrEl.value = cohYr.value || 'TOUTES';
+    populateClassesForYearDropdown(yrEl ? yrEl.value : 'TOUTES', clsEl);
+    if (cohCls && clsEl) clsEl.value = cohCls.value || 'TOUTES';
+    refreshStudentDropdownOptions();
+
+    const sel = document.getElementById('student-select-dropdown');
+    if (!Array.from(sel.options).some(o => o.value === studentId)) {
+      if (yrEl) yrEl.value = 'TOUTES';
+      populateClassesForYearDropdown('TOUTES', clsEl);
+      if (clsEl) clsEl.value = 'TOUTES';
+      refreshStudentDropdownOptions();
+    }
+    sel.value = studentId;
     switchView('students');
   }
 
@@ -1411,7 +1654,10 @@
               <tbody>
                 ${(rec.disciplines || []).map(d => `
                   <tr>
-                    <td style="font-weight:${d.principale ? '700' : '400'};">${escapeHtml(d.discipline)}</td>
+                    <td>
+                      <div style="font-weight:${d.principale ? '700' : '400'};">${escapeHtml(d.discipline)}</div>
+                      ${d.professeur ? `<div style="font-size:11.5px; color:var(--slate-500); font-weight:400; margin-top:2px;">${escapeHtml(d.professeur)}</div>` : ''}
+                    </td>
                     <td class="center">${d.principale ? '<span class="badge badge-slate">Principale</span>' : '<span style="color:var(--slate-500); font-size:11.5px;">Autre discipline</span>'}</td>
                     <td class="center">${formatGradeCellHtml(d.t1)}</td>
                     <td class="center">${formatGradeCellHtml(d.t2)}</td>
@@ -1485,7 +1731,10 @@
     const tbody = document.getElementById('man-disciplines-tbody');
     tbody.innerHTML = manualDisciplines.map((d, idx) => `
       <tr>
-        <td><input type="text" value="${escapeHtml(d.discipline)}" style="width:100%;" oninput="manualDisciplines[${idx}].discipline = this.value"></td>
+        <td>
+          <input type="text" value="${escapeHtml(d.discipline)}" placeholder="Nom de la matière" style="width:100%;" oninput="manualDisciplines[${idx}].discipline = this.value">
+          <input type="text" value="${escapeHtml(d.professeur || '')}" placeholder="Professeur(s) de la matière" style="width:100%; margin-top:4px; font-size:11.5px; color:var(--slate-600); padding:4px 8px;" oninput="manualDisciplines[${idx}].professeur = this.value">
+        </td>
         <td class="center"><input type="checkbox" ${d.principale ? 'checked' : ''} onchange="manualDisciplines[${idx}].principale = this.checked"></td>
         <td class="center"><input type="text" class="grade-input" value="${escapeHtml(d.t1)}" oninput="manualDisciplines[${idx}].t1 = this.value"></td>
         <td class="center"><input type="text" class="grade-input" value="${escapeHtml(d.t2)}" oninput="manualDisciplines[${idx}].t2 = this.value"></td>
@@ -1497,7 +1746,7 @@
   }
 
   function addManualDisciplineRow() {
-    manualDisciplines.push({ discipline: "", principale: false, t1: "", t2: "", t3: "", moyenne: "" });
+    manualDisciplines.push({ discipline: "", professeur: "", principale: false, t1: "", t2: "", t3: "", moyenne: "" });
     renderManualDisciplinesTable();
   }
 
@@ -1576,16 +1825,17 @@
   // ===========================================================================
   async function exportCurrentCohortExcel() {
     if (!appDb.students || appDb.students.length === 0) {
-      alert("Aucun élève n'est encore enregistré dans la base. Importez d'abord un bulletin PDF.");
+      alert("Aucun élève n'est encore enregistré dans la base. Importez d'abord des données.");
       return;
     }
+    const anneeScolaire = (document.getElementById('cohort-year-filter') && document.getElementById('cohort-year-filter').value) || 'TOUTES';
     const classe = document.getElementById('cohort-class-filter').value || 'TOUTES';
     showLoader("Génération du rapport Excel (.xlsx) multi-feuilles…");
     try {
       const res = await fetch('/api/export-excel', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ classe, openAfter: true })
+        body: JSON.stringify({ anneeScolaire, classe, openAfter: true })
       });
       const data = await res.json();
       hideLoader();

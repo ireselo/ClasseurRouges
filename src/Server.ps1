@@ -1,4 +1,4 @@
-# Serveur Local & Lanceur d'Application - Classeurs Rouges (CO Geneve)
+﻿# Serveur Local & Lanceur d'Application - Classeurs Rouges (CO Geneve)
 # Fonctionne 100% hors-ligne (127.0.0.1 uniquement)
 
 $ErrorActionPreference = "Continue"
@@ -9,8 +9,8 @@ Add-Type -AssemblyName System.Windows.Forms
 
 function Select-PdfFilesDialog {
     $dlg = New-Object System.Windows.Forms.OpenFileDialog
-    $dlg.Title = "Sélectionner un ou plusieurs bulletins scolaires (PDF)"
-    $dlg.Filter = "Bulletins PDF (*.pdf)|*.pdf|Tous les fichiers (*.*)|*.*"
+    $dlg.Title = "Sélectionner des documents à importer (PDF, XML Notes/Absences, Excel/CSV Professeurs)"
+    $dlg.Filter = "Documents supportés (*.pdf;*.xml;*.xls;*.xlsx;*.csv;*.txt)|*.pdf;*.xml;*.xls;*.xlsx;*.csv;*.txt|Fichiers Excel Professeurs (*.xls;*.xlsx)|*.xls;*.xlsx|Fichiers XML Notes & Absences (*.xml)|*.xml|Bulletins PDF (*.pdf)|*.pdf|Fichiers CSV (*.csv;*.txt)|*.csv;*.txt|Tous les fichiers (*.*)|*.*"
     $dlg.Multiselect = $true
     $form = New-Object System.Windows.Forms.Form
     $form.TopMost = $true
@@ -124,57 +124,70 @@ try {
             }
 
             if ($req.HttpMethod -eq "POST" -and $path -eq "/api/pick-pdfs") {
+                . (Join-Path $baseDir "src\Engine.ps1")
                 $files = Select-PdfFilesDialog
                 if ($files.Count -eq 0) {
                     Send-JsonResponse $res @{ ok = $true; cancelled = $true; bulletins = @() }
                     continue
                 }
-                $allBulletins = @()
-                foreach ($f in $files) {
-                    $extracted = Extract-BulletinsFromPdf $f
-                    $allBulletins += $extracted
+                $batchRes = Import-DocumentsBatch $files $baseDir
+                Send-JsonResponse $res @{
+                    ok = $true
+                    cancelled = $false
+                    bulletins = @($batchRes.bulletins)
+                    autoSavedCount = $batchRes.autoSavedCount
+                    teachersParsedCount = $batchRes.teachersParsedCount
+                    db = $batchRes.db
                 }
-                Send-JsonResponse $res @{ ok = $true; cancelled = $false; bulletins = $allBulletins }
                 continue
             }
 
             if ($req.HttpMethod -eq "POST" -and $path -eq "/api/upload-pdf") {
+                . (Join-Path $baseDir "src\Engine.ps1")
                 $sr = New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)
                 $bodyJson = $sr.ReadToEnd()
                 $sr.Close()
                 $payload = $bodyJson | ConvertFrom-Json
 
-                $allBulletins = @()
-                foreach ($item in $payload.files) {
-                    $b64 = $item.dataBase64
-                    if ($b64 -match '^data:.*?;base64,(.*)$') { $b64 = $Matches[1] }
-                    $bytes = [Convert]::FromBase64String($b64)
-                    $safeName = [System.IO.Path]::GetFileName($item.fileName)
-                    $tempPdf = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "agy_upload_" + $safeName)
-                    [System.IO.File]::WriteAllBytes($tempPdf, $bytes)
-                    try {
-                        $extracted = Extract-BulletinsFromPdf $tempPdf
-                        foreach ($eb in $extracted) { $eb.sourceFile = $safeName }
-                        $allBulletins += $extracted
-                    } finally {
-                        Remove-Item $tempPdf -Force -ErrorAction SilentlyContinue
+                $tempFiles = @()
+                try {
+                    foreach ($item in $payload.files) {
+                        $b64 = $item.dataBase64
+                        if ($b64 -match '^data:.*?;base64,(.*)$') { $b64 = $Matches[1] }
+                        $bytes = [Convert]::FromBase64String($b64)
+                        $safeName = [System.IO.Path]::GetFileName($item.fileName)
+                        $tempPath = [System.IO.Path]::Combine([System.IO.Path]::GetTempPath(), "agy_upload_" + $safeName)
+                        [System.IO.File]::WriteAllBytes($tempPath, $bytes)
+                        $tempFiles += $tempPath
+                    }
+                    $batchRes = Import-DocumentsBatch $tempFiles $baseDir
+                    Send-JsonResponse $res @{
+                        ok = $true
+                        bulletins = @($batchRes.bulletins)
+                        autoSavedCount = $batchRes.autoSavedCount
+                        teachersParsedCount = $batchRes.teachersParsedCount
+                        db = $batchRes.db
+                    }
+                } finally {
+                    foreach ($tf in $tempFiles) {
+                        Remove-Item $tf -Force -ErrorAction SilentlyContinue
                     }
                 }
-                Send-JsonResponse $res @{ ok = $true; bulletins = $allBulletins }
                 continue
             }
 
             if ($req.HttpMethod -eq "POST" -and $path -eq "/api/save-bulletins") {
+                . (Join-Path $baseDir "src\Engine.ps1")
                 $sr = New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)
                 $bodyJson = $sr.ReadToEnd()
                 $sr.Close()
                 $payload = $bodyJson | ConvertFrom-Json
 
                 $db = Load-Database $baseDir
-                $count = 0
-                foreach ($b in $payload.bulletins) {
-                    $db = Upsert-BulletinRecord $db $b
-                    $count++
+                $bulletinsArr = @($payload.bulletins)
+                $count = $bulletinsArr.Count
+                if ($count -gt 0) {
+                    $db = Upsert-BulletinRecordsBatch $db $bulletinsArr
                 }
                 Save-Database $baseDir $db
                 Send-JsonResponse $res @{ ok = $true; savedCount = $count; db = $db }
@@ -221,15 +234,18 @@ try {
             }
 
             if ($req.HttpMethod -eq "POST" -and $path -eq "/api/export-excel") {
+                . (Join-Path $baseDir "src\Engine.ps1")
                 $sr = New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)
                 $bodyJson = $sr.ReadToEnd()
                 $sr.Close()
                 $payload = $bodyJson | ConvertFrom-Json
 
+                $targetAnnee = if ($payload.PSObject.Properties["anneeScolaire"] -and $payload.anneeScolaire) { $payload.anneeScolaire } else { "TOUTES" }
                 $targetClasse = $payload.classe
+                $cleanYr = if ([string]::IsNullOrWhiteSpace($targetAnnee) -or $targetAnnee -eq "TOUTES") { "" } else { "${targetAnnee}_" }
                 $cleanCls = if ([string]::IsNullOrWhiteSpace($targetClasse) -or $targetClasse -eq "TOUTES") { "Toutes_Classes" } else { $targetClasse }
                 $dateStr = (Get-Date).ToString("yyyy-MM-dd")
-                $defaultName = "Classeur_Rouge_${cleanCls}_${dateStr}.xlsx"
+                $defaultName = "Classeur_Rouge_${cleanYr}${cleanCls}_${dateStr}.xlsx"
 
                 $savePath = Select-SaveExcelDialog $defaultName
                 if ([string]::IsNullOrWhiteSpace($savePath)) {
@@ -238,7 +254,7 @@ try {
                 }
 
                 $db = Load-Database $baseDir
-                Export-CohortExcelReport $db $targetClasse $savePath | Out-Null
+                Export-CohortExcelReport $db $targetClasse $savePath $targetAnnee | Out-Null
 
                 if ($payload.openAfter -eq $true -and (Test-Path $savePath)) {
                     Start-Process $savePath

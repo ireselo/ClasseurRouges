@@ -1,4 +1,4 @@
-# Engine: Extraction PDF & Generation Excel (.xlsx) - Classeurs Rouges (CO Geneve)
+﻿# Engine: Extraction PDF & Generation Excel (.xlsx) - Classeurs Rouges (CO Geneve)
 
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 Add-Type -AssemblyName System.Drawing
@@ -422,10 +422,932 @@ function Normalize-Identity([string]$s) {
     return ($s.Trim().ToUpperInvariant() -replace '\s+', ' ')
 }
 
+function Read-FileSmartEncoding([string]$filePath) {
+    $bytes = [System.IO.File]::ReadAllBytes($filePath)
+    if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+        return [System.Text.Encoding]::UTF8.GetString($bytes, 3, $bytes.Length - 3)
+    }
+    $asciiPreview = [System.Text.Encoding]::ASCII.GetString($bytes, 0, [Math]::Min($bytes.Length, 250))
+    if ($asciiPreview -match '(?i)encoding\s*=\s*["''](?:ISO-8859-1|windows-1252|latin1)["'']') {
+        return [System.Text.Encoding]::GetEncoding(28591).GetString($bytes)
+    }
+    $utf8Strict = New-Object System.Text.UTF8Encoding($false, $true)
+    try {
+        return $utf8Strict.GetString($bytes)
+    } catch {
+        return [System.Text.Encoding]::GetEncoding(28591).GetString($bytes)
+    }
+}
+
+function Normalize-SchoolYear([string]$yr, [string]$noAnnee = "") {
+    if (-not [string]::IsNullOrWhiteSpace($yr)) {
+        $y = $yr.Trim()
+        if ($y -match '^(\d{4})-(\d{2})$') {
+            $start = $Matches[1]
+            $century = $start.Substring(0, 2)
+            return "$start-$century$($Matches[2])"
+        }
+        if ($y -match '^\d{4}-\d{4}$') { return $y }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($noAnnee) -and $noAnnee -match '^\d+$') {
+        $n = [int]$noAnnee
+        $startYr = 1994 + $n
+        $endYr = $startYr + 1
+        return "$startYr-$endYr"
+    }
+    return ""
+}
+
+function Convert-ExcelToCsvString([string]$excelPath) {
+    $xl = $null
+    $wb = $null
+    try {
+        $xl = New-Object -ComObject Excel.Application
+        $xl.Visible = $false
+        $xl.DisplayAlerts = $false
+        $wb = $xl.Workbooks.Open($excelPath, 0, $true)
+        $ws = $wb.Worksheets.Item(1)
+        $used = $ws.UsedRange
+        $rowCount = $used.Rows.Count
+        $colCount = $used.Columns.Count
+        $vals = $used.Value2
+        $sb = New-Object System.Text.StringBuilder
+        if ($rowCount -eq 1 -and $colCount -eq 1) {
+            [void]$sb.AppendLine([string]$vals)
+        } else {
+            $maxCols = [Math]::Min($colCount, 20)
+            for ($r = 1; $r -le $rowCount; $r++) {
+                $rowArr = New-Object string[] $maxCols
+                for ($c = 1; $c -le $maxCols; $c++) {
+                    $cellVal = $vals[$r, $c]
+                    $rowArr[$c - 1] = if ($null -eq $cellVal) { "" } else { ([string]$cellVal).Replace("`r", " ").Replace("`n", " ").Trim() }
+                }
+                [void]$sb.AppendLine(($rowArr -join ","))
+            }
+        }
+        return $sb.ToString()
+    } finally {
+        if ($null -ne $wb) { try { $wb.Close($false) } catch {} }
+        if ($null -ne $xl) {
+            try { $xl.Quit() } catch {}
+            try { [System.Runtime.Interopservices.Marshal]::ReleaseComObject($xl) | Out-Null } catch {}
+        }
+    }
+}
+
+function Get-ClassAndRegroupementFromCode([string]$code) {
+    if ([string]::IsNullOrWhiteSpace($code)) {
+        return @{ classe = ""; niveau = ""; regroupement = "" }
+    }
+    $c = $code.Trim()
+    $cls = ""
+    if ($c -match '(?i)(0?9\d{2}(?:R[123]|TC|MI|DR)|10\d{2}(?:CT|LC|LS|MI|Ac|AT)|11\d{2}(?:CT|LC|LS|MI|Ac|AT))') {
+        $cls = $Matches[1]
+    } elseif ($c -match '(?i)(0?9\d{2}|10\d{2}|11\d{2})') {
+        $cls = $Matches[1]
+    }
+    $niv = ""
+    if ($cls -match '^0?9') { $niv = "9CO" }
+    elseif ($cls -match '^10') { $niv = "10CO" }
+    elseif ($cls -match '^11') { $niv = "11CO" }
+
+    $reg = ""
+    if ($cls -match 'R1$') { $reg = "regroupement 1" }
+    elseif ($cls -match 'R2$') { $reg = "regroupement 2" }
+    elseif ($cls -match 'R3$') { $reg = "regroupement 3" }
+    elseif ($cls -match 'TC$') { $reg = "Tronc commun" }
+    elseif ($cls -match 'DR$') { $reg = "Classe DR" }
+    elseif ($cls -match 'CT$') { $reg = "Section CT" }
+    elseif ($cls -match 'LC$') { $reg = "Section LC" }
+    elseif ($cls -match 'LS$') { $reg = "Section LS" }
+    elseif ($cls -match 'MI$') { $reg = "Classe MI" }
+    elseif ($cls -match '(?i)Ac$') { $reg = "Accueil" }
+    elseif ($cls -match '(?i)AT$') { $reg = "Atelier" }
+
+    return @{ classe = $cls; niveau = $niv; regroupement = $reg }
+}
+
+function Resolve-CourseCodeInfo([string]$coursCode, [string]$niveauHint = "", [string]$classeHint = "") {
+    if ([string]::IsNullOrWhiteSpace($coursCode)) { return $null }
+    $c = $coursCode.Trim()
+
+    # Ignore non-graded courses and support/atelier lines requested to be excluded
+    if ($c -match '^(?i)(MT|SH|DT|TMBois|EPI\b|Appui|Passerelle|Rattr\.|SA\+)') {
+        return $null
+    }
+
+    # Extract alphabetic course prefix (e.g. BIO, DMS, AC, AL, AN, BI, EN, EP, FR, FL, GE, HI, LA, MA, MC, MI, MU, AV, PY, SA, EC, EO, FO, CM)
+    $prefix = ""
+    if ($c -match '^([A-Za-z]+)') {
+        $prefix = $Matches[1].ToUpperInvariant()
+    }
+
+    $subjectMap = @{
+        "FR"  = "Français"
+        "FL"  = "Français lecture"
+        "AL"  = "Allemand"
+        "MA"  = "Mathématiques"
+        "AN"  = "Anglais"
+        "BI"  = "Biologie"
+        "BIO" = "Biologie"
+        "PY"  = "Physique"
+        "DMS" = "DMS"
+        "HI"  = "Histoire"
+        "GE"  = "Géographie"
+        "LA"  = "Latin"
+        "SA"  = "Sciences appliqués"
+        "MC"  = "Informatique"
+        "MI"  = "Média-Image"
+        "AC"  = "Activités créatrices et manuelles"
+        "AV"  = "Arts visuels"
+        "MU"  = "Musique"
+        "EP"  = "Education physique"
+        "EN"  = "Education nutritionnelle"
+        "EC"  = "EVACOM / TAF"
+        "CM"  = "Connaissance du Milieu"
+        "EO"  = "Education aux choix et à l'orientation"
+        "FO"  = "Education aux choix et à l'orientation"
+    }
+
+    $discName = if ($subjectMap.ContainsKey($prefix)) { $subjectMap[$prefix] } else { $c }
+    $clsInfo = Get-ClassAndRegroupementFromCode $c
+    $effNiv = if (-not [string]::IsNullOrWhiteSpace($niveauHint)) { $niveauHint } else { $clsInfo.niveau }
+    $effCls = if (-not [string]::IsNullOrWhiteSpace($classeHint)) { $classeHint } else { $clsInfo.classe }
+
+    # Determine if discipline is principale
+    $isPrincipale = $false
+    if ($prefix -in @("FR", "AL", "MA")) {
+        $isPrincipale = $true
+    } elseif ($effNiv -in @("10CO", "11CO")) {
+        if ($effCls -match 'LC$' -and $prefix -in @("AN", "SA")) {
+            $isPrincipale = $true
+        } elseif ($effCls -match 'LS$' -and $prefix -in @("LA", "DMS", "BI", "BIO", "PY", "AN")) {
+            $isPrincipale = $true
+        } elseif ($prefix -in @("LA", "SA", "DMS")) {
+            $isPrincipale = $true
+        }
+    }
+
+    return [PSCustomObject]@{
+        codeCours  = $c
+        prefix     = $prefix
+        discipline = $discName
+        principale = [bool]$isPrincipale
+        classe     = $clsInfo.classe
+        niveau     = $clsInfo.niveau
+        regroupement = $clsInfo.regroupement
+    }
+}
+
+function Calculate-CountingAverage([string[]]$grades) {
+    $sum = 0.0
+    $count = 0
+    foreach ($g in $grades) {
+        if ([string]::IsNullOrWhiteSpace($g)) { continue }
+        $s = $g.Trim()
+        # Exclude parenthesized grades (Compte="0") and non-numeric codes
+        if ($s.StartsWith("(") -or $s -match '^(?i)(C\.M|Disp|N\.E)') { continue }
+        $num = 0.0
+        if ([double]::TryParse(($s -replace ',', '.'), [System.Globalization.NumberStyles]::Any, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$num)) {
+            $sum += $num
+            $count++
+        }
+    }
+    if ($count -eq 0) { return "" }
+    $avg = [Math]::Round(($sum / $count) + 1e-9, 1, [System.MidpointRounding]::AwayFromZero)
+    return $avg.ToString("0.0", [System.Globalization.CultureInfo]::InvariantCulture)
+}
+
+function Parse-TeachersCsvContent([string]$rawContent) {
+    $courseTeachersList = @{}
+    $classSubjectTeachersList = @{}
+    $classMaitre = @{}
+    $detectedCollege = ""
+    $detectedYear = ""
+
+    $lines = $rawContent -split "\r?\n"
+    $expectingHeaderMaitre = $false
+    $currentBlockHeaderMaitre = ""
+    $currentBlockClasses = @()
+    $currentBlockCourses = @()
+
+    foreach ($line in $lines) {
+        if ([string]::IsNullOrWhiteSpace($line)) { continue }
+        $cols = $line -split ','
+        $c0 = if ($cols.Count -gt 0) { $cols[0].Trim() } else { "" }
+        $c1 = if ($cols.Count -gt 1) { $cols[1].Trim() } else { "" }
+        $c2 = if ($cols.Count -gt 2) { $cols[2].Trim() } else { "" }
+        $c3 = if ($cols.Count -gt 3) { $cols[3].Trim() } else { "" }
+        $c4 = if ($cols.Count -gt 4) { $cols[4].Trim() } else { "" }
+
+        if ($c3 -eq "Maitre" -and $c1 -eq "") {
+            # Flush previous block's header maitre to detected classes
+            if ($currentBlockHeaderMaitre -ne "" -and $currentBlockClasses.Count -gt 0) {
+                $topCls = ($currentBlockClasses | Group-Object | Sort-Object Count -Descending | Select-Object -First 1).Name
+                if ($topCls -and -not $classMaitre.ContainsKey($topCls)) {
+                    $classMaitre[$topCls] = $currentBlockHeaderMaitre
+                }
+            }
+            $expectingHeaderMaitre = $true
+            $currentBlockHeaderMaitre = ""
+            $currentBlockClasses = @()
+            $currentBlockCourses = @()
+            continue
+        }
+
+        if ($expectingHeaderMaitre) {
+            if ($c3 -ne "" -and $c3 -ne "Champ30") {
+                $currentBlockHeaderMaitre = $c3
+            }
+            $expectingHeaderMaitre = $false
+            continue
+        }
+
+        if ($c3 -eq "Champ30") { continue }
+
+        if ($c3 -match "(?i)(CYCLE D'ORIENTATION|COLL[EÈ]GE)" -or $c4 -match '^\d{4}-\d{2,4}$') {
+            if ($c3 -ne "" -and $detectedCollege -eq "") { $detectedCollege = $c3 }
+            if ($c4 -ne "" -and $detectedYear -eq "") { $detectedYear = Normalize-SchoolYear $c4 }
+            continue
+        }
+
+        if ($c0 -eq "Groupe" -and $c1 -eq "LibelleCours") { continue }
+
+        if ($c1 -ne "" -and $c2 -ne "") {
+            # If MT<Classe>, record class maitre
+            if ($c1 -match '^(?i)MT(.+)$') {
+                $mtClsInfo = Get-ClassAndRegroupementFromCode $c1
+                $mtCls = if ($mtClsInfo.classe -ne "") { $mtClsInfo.classe } else { $Matches[1].Trim() }
+                if ($mtCls -ne "") {
+                    $currentBlockClasses += $mtCls
+                    if ($currentBlockHeaderMaitre -ne "") {
+                        $classMaitre[$mtCls] = $currentBlockHeaderMaitre
+                    } else {
+                        if (-not $classMaitre.ContainsKey($mtCls)) {
+                            $classMaitre[$mtCls] = $c2
+                        } elseif ($classMaitre[$mtCls] -notmatch [regex]::Escape($c2)) {
+                            $classMaitre[$mtCls] = $classMaitre[$mtCls] + " / " + $c2
+                        }
+                    }
+                }
+                continue
+            }
+
+            if (-not $courseTeachersList.ContainsKey($c1)) {
+                $courseTeachersList[$c1] = New-Object 'System.Collections.Generic.List[string]'
+            }
+            if (-not $courseTeachersList[$c1].Contains($c2)) {
+                $courseTeachersList[$c1].Add($c2)
+            }
+
+            $info = Resolve-CourseCodeInfo $c1
+            if ($null -ne $info -and $info.classe -ne "" -and $info.discipline -ne "") {
+                $currentBlockClasses += $info.classe
+                $key = "$($info.classe)|$(Normalize-Identity $info.discipline)"
+                if (-not $classSubjectTeachersList.ContainsKey($key)) {
+                    $classSubjectTeachersList[$key] = New-Object 'System.Collections.Generic.List[string]'
+                }
+                if (-not $classSubjectTeachersList[$key].Contains($c2)) {
+                    $classSubjectTeachersList[$key].Add($c2)
+                }
+            }
+        }
+    }
+
+    if ($currentBlockHeaderMaitre -ne "" -and $currentBlockClasses.Count -gt 0) {
+        $topCls = ($currentBlockClasses | Group-Object | Sort-Object Count -Descending | Select-Object -First 1).Name
+        if ($topCls -and -not $classMaitre.ContainsKey($topCls)) {
+            $classMaitre[$topCls] = $currentBlockHeaderMaitre
+        }
+    }
+
+    $courseTeachers = @{}
+    foreach ($k in $courseTeachersList.Keys) {
+        $courseTeachers[$k] = ($courseTeachersList[$k] -join " / ")
+    }
+    $classSubjectTeachers = @{}
+    foreach ($k in $classSubjectTeachersList.Keys) {
+        $classSubjectTeachers[$k] = ($classSubjectTeachersList[$k] -join " / ")
+    }
+
+    return [PSCustomObject]@{
+        college              = $detectedCollege
+        anneeScolaire        = $detectedYear
+        courseTeachers       = $courseTeachers
+        classSubjectTeachers = $classSubjectTeachers
+        classMaitre          = $classMaitre
+    }
+}
+
+function Parse-NotesOrAbsencesXmlContent([string]$rawXml, [string]$sourceFileName = "Document.xml") {
+    $isNotes = ($rawXml -match '<notes\b')
+    $isAbsences = ($rawXml -match '<absences\b')
+    if (-not $isNotes -and -not $isAbsences) {
+        return $null
+    }
+
+    $noAnnee = ""
+    $sigle = ""
+    if ($rawXml -match '<(?:notes|absences)\b[^>]*\bNoAnnee="([^"]*)"') { $noAnnee = $Matches[1] }
+    if ($rawXml -match '<(?:notes|absences)\b[^>]*\bsigle="([^"]*)"') { $sigle = $Matches[1] }
+    $anneeScolaire = Normalize-SchoolYear "" $noAnnee
+    $college = if ($sigle -eq "VOIRE") { "CYCLE D'ORIENTATION DES VOIRETS" } else { $sigle }
+
+    $degreMatches = [regex]::Matches($rawXml, '<Degre\b[^>]*\bValeur="([^"]+)"[^>]*>([\s\S]*?)(?=</Degre>|<Degre\b|\z)')
+    $blocksToProcess = @()
+    if ($degreMatches.Count -gt 0) {
+        foreach ($dm in $degreMatches) {
+            $dVal = $dm.Groups[1].Value.Trim()
+            $niv = if ($dVal -match '^0?9$') { "9CO" } elseif ($dVal -eq "10") { "10CO" } elseif ($dVal -eq "11") { "11CO" } else { "9CO" }
+            $blocksToProcess += @{ niveau = $niv; content = $dm.Groups[2].Value }
+        }
+    } else {
+        $blocksToProcess += @{ niveau = "9CO"; content = $rawXml }
+    }
+
+    $records = @()
+    $pageIdx = 0
+
+    foreach ($blk in $blocksToProcess) {
+        $niv = $blk.niveau
+        $eleveMatches = [regex]::Matches($blk.content, '<eleve\b([^>]*)>([\s\S]*?)(?=</eleve>|<eleve\b|</eleves>|</Degre>|</notes>|</absences>|\z)')
+        foreach ($em in $eleveMatches) {
+            $pageIdx++
+            $attrs = $em.Groups[1].Value
+            $inner = $em.Groups[2].Value
+
+            $noBds = ""; $nom = ""; $prenom = ""
+            if ($attrs -match '\bNoBDS="([^"]*)"') { $noBds = $Matches[1].Trim() }
+            if ($attrs -match '\bNom="([^"]*)"') { $nom = $Matches[1].Trim() }
+            if ($attrs -match '\bPrenom="([^"]*)"') { $prenom = $Matches[1].Trim() }
+            $eleveNom = ("$nom $prenom").Trim()
+
+            if ($isNotes) {
+                $noteMatches = [regex]::Matches($inner, '<note\b[^>]*\bCours="([^"]+)"[^>]*>([\s\S]*?)(?=</note>|<note\b|\z)')
+                $classCandidates = @()
+                $rawNotes = @()
+
+                foreach ($nm in $noteMatches) {
+                    $coursCode = $nm.Groups[1].Value.Trim()
+                    $noteInner = $nm.Groups[2].Value
+                    $clsCheck = Get-ClassAndRegroupementFromCode $coursCode
+                    if ($clsCheck.classe -ne "") { $classCandidates += $clsCheck.classe }
+
+                    $p1 = ""; $p2 = ""; $p3 = ""
+                    $periodeMatches = [regex]::Matches($noteInner, '<Periode\b([^>]*)/?>')
+                    foreach ($pm in $periodeMatches) {
+                        $pAttrs = $pm.Groups[1].Value
+                        $periodeId = ""; $pVal = ""; $pCompte = "1"
+                        if ($pAttrs -match '\bid="([^"]*)"') { $periodeId = $Matches[1].Trim() }
+                        if ($pAttrs -match '\bValeur="([^"]*)"') { $pVal = $Matches[1].Trim() }
+                        if ($pAttrs -match '\bCompte="([^"]*)"') { $pCompte = $Matches[1].Trim() }
+
+                        if ($periodeId -in @("1", "2", "3") -and $pVal -ne "") {
+                            $normVal = $pVal -replace ',', '.'
+                            $formattedVal = if ($pCompte -eq "0") { "($normVal)" } else { $normVal }
+                            if ($periodeId -eq "1") { $p1 = $formattedVal }
+                            elseif ($periodeId -eq "2") { $p2 = $formattedVal }
+                            elseif ($periodeId -eq "3") { $p3 = $formattedVal }
+                        }
+                    }
+
+                    $rawNotes += [PSCustomObject]@{
+                        coursCode = $coursCode
+                        t1 = $p1
+                        t2 = $p2
+                        t3 = $p3
+                    }
+                }
+
+                $studentClasse = ""
+                $studentRegroupement = ""
+                if ($classCandidates.Count -gt 0) {
+                    $studentClasse = ($classCandidates | Group-Object | Sort-Object Count -Descending | Select-Object -First 1).Name
+                    $cInfo = Get-ClassAndRegroupementFromCode $studentClasse
+                    $studentRegroupement = $cInfo.regroupement
+                    if ($cInfo.niveau -ne "") { $niv = $cInfo.niveau }
+                }
+
+                $disciplines = @()
+                foreach ($rn in $rawNotes) {
+                    $info = Resolve-CourseCodeInfo $rn.coursCode $niv $studentClasse
+                    if ($null -eq $info) { continue }
+                    $moy = Calculate-CountingAverage @($rn.t1, $rn.t2, $rn.t3)
+                    $disciplines += [PSCustomObject]@{
+                        codeCours  = $rn.coursCode
+                        discipline = $info.discipline
+                        professeur = ""
+                        principale = [bool]$info.principale
+                        t1         = $rn.t1
+                        t2         = $rn.t2
+                        t3         = $rn.t3
+                        moyenne    = $moy
+                    }
+                }
+
+                $princGrades = @($disciplines | Where-Object { $_.principale -and $_.moyenne -ne "" } | ForEach-Object { $_.moyenne })
+                $allGrades   = @($disciplines | Where-Object { $_.moyenne -ne "" } | ForEach-Object { $_.moyenne })
+                $moyPrincipales = Calculate-CountingAverage $princGrades
+                $moyGenerale    = Calculate-CountingAverage $allGrades
+
+                $records += [PSCustomObject]@{
+                    recordType     = "notes"
+                    pageNumber     = $pageIdx
+                    sourceFile     = $sourceFileName
+                    anneeScolaire  = $anneeScolaire
+                    college        = $college
+                    eleveNom       = $eleveNom
+                    numEleve       = $noBds
+                    classe         = $studentClasse
+                    niveau         = $niv
+                    regroupement   = $studentRegroupement
+                    maitre         = ""
+                    moyPrincipales = $moyPrincipales
+                    moyGenerale    = $moyGenerale
+                    situation      = ""
+                    orientation    = ""
+                    absT1          = ""
+                    absT2          = ""
+                    absT3          = ""
+                    absTotal       = ""
+                    disciplines    = $disciplines
+                    previewImage   = ""
+                }
+            } elseif ($isAbsences) {
+                $abs1 = ""; $abs2 = ""; $abs3 = ""
+                $periodeMatches = [regex]::Matches($inner, '<Periode\b([^>]*)/?>')
+                foreach ($pm in $periodeMatches) {
+                    $pAttrs = $pm.Groups[1].Value
+                    $periodeId = ""; $pVal = ""
+                    if ($pAttrs -match '\bid="([^"]*)"') { $periodeId = $Matches[1].Trim() }
+                    if ($pAttrs -match '\bValeur="([^"]*)"') { $pVal = $Matches[1].Trim() }
+                    if ($periodeId -eq "1") { $abs1 = $pVal }
+                    elseif ($periodeId -eq "2") { $abs2 = $pVal }
+                    elseif ($periodeId -eq "3") { $abs3 = $pVal }
+                }
+                $sumAbs = 0
+                $hasAnyAbs = $false
+                foreach ($av in @($abs1, $abs2, $abs3)) {
+                    if ($av -match '^\d+$') { $sumAbs += [int]$av; $hasAnyAbs = $true }
+                }
+                $absTot = if ($hasAnyAbs) { [string]$sumAbs } else { "" }
+
+                $records += [PSCustomObject]@{
+                    recordType     = "absences"
+                    pageNumber     = $pageIdx
+                    sourceFile     = $sourceFileName
+                    anneeScolaire  = $anneeScolaire
+                    college        = $college
+                    eleveNom       = $eleveNom
+                    numEleve       = $noBds
+                    classe         = ""
+                    niveau         = $niv
+                    regroupement   = ""
+                    maitre         = ""
+                    moyPrincipales = ""
+                    moyGenerale    = ""
+                    situation      = ""
+                    orientation    = ""
+                    absT1          = $abs1
+                    absT2          = $abs2
+                    absT3          = $abs3
+                    absTotal       = $absTot
+                    disciplines    = @()
+                    previewImage   = ""
+                }
+            }
+        }
+    }
+
+    return [PSCustomObject]@{
+        docType       = if ($isNotes) { "notes" } else { "absences" }
+        anneeScolaire = $anneeScolaire
+        college       = $college
+        records       = $records
+    }
+}
+
+function Get-CatalogLookup($dictObj, [string]$yr, [string]$baseKey) {
+    if ($null -eq $dictObj -or [string]::IsNullOrWhiteSpace($baseKey)) { return $null }
+    if (-not [string]::IsNullOrWhiteSpace($yr)) {
+        $yrKey = "$($yr.Trim())|$baseKey"
+        if ($dictObj -is [hashtable] -and $dictObj.ContainsKey($yrKey)) { return $dictObj[$yrKey] }
+        elseif ($null -ne $dictObj.PSObject.Properties[$yrKey]) { return $dictObj.PSObject.Properties[$yrKey].Value }
+    }
+    if ($dictObj -is [hashtable] -and $dictObj.ContainsKey($baseKey)) { return $dictObj[$baseKey] }
+    elseif ($null -ne $dictObj.PSObject.Properties[$baseKey]) { return $dictObj.PSObject.Properties[$baseKey].Value }
+    return $null
+}
+
+function Apply-TeacherCatalogToBulletin($b, $catalog) {
+    if ($null -eq $catalog) { return $b }
+    if ([string]::IsNullOrWhiteSpace($b.college) -and -not [string]::IsNullOrWhiteSpace($catalog.college)) {
+        $b.college = $catalog.college
+    }
+    if (-not [string]::IsNullOrWhiteSpace($catalog.anneeScolaire) -and [string]::IsNullOrWhiteSpace($b.anneeScolaire)) {
+        $b.anneeScolaire = $catalog.anneeScolaire
+    }
+    $yr = if ($b.anneeScolaire) { $b.anneeScolaire.Trim() } else { "" }
+    $cls = if ($b.classe) { $b.classe.Trim() } else { "" }
+    if ($cls -ne "" -and $null -ne $catalog.classMaitre) {
+        $cm = Get-CatalogLookup $catalog.classMaitre $yr $cls
+        if (-not [string]::IsNullOrWhiteSpace($cm)) {
+            $b.maitre = $cm
+        }
+    }
+
+    if ($null -ne $b.disciplines) {
+        foreach ($d in $b.disciplines) {
+            if ($null -eq $d.PSObject.Properties["professeur"]) {
+                $d | Add-Member -NotePropertyName "professeur" -NotePropertyValue "" -Force
+            }
+            $prof = ""
+            $cCode = if ($null -ne $d.PSObject.Properties["codeCours"] -and $d.codeCours) { $d.codeCours.Trim() } else { "" }
+            if ($cCode -ne "" -and $null -ne $catalog.courseTeachers) {
+                $prof = Get-CatalogLookup $catalog.courseTeachers $yr $cCode
+            }
+            if ([string]::IsNullOrWhiteSpace($prof) -and $cls -ne "" -and -not [string]::IsNullOrWhiteSpace($d.discipline) -and $null -ne $catalog.classSubjectTeachers) {
+                $fallbackKey = "$cls|$(Normalize-Identity $d.discipline)"
+                $prof = Get-CatalogLookup $catalog.classSubjectTeachers $yr $fallbackKey
+            }
+            if (-not [string]::IsNullOrWhiteSpace($prof)) {
+                $d.professeur = $prof
+            }
+        }
+    }
+    return $b
+}
+
+function Merge-TeacherCatalogIntoDb($db, $newCatalog) {
+    if ($null -eq $newCatalog) { return $db }
+    if ($null -eq $db.PSObject.Properties["teacherCatalog"] -or $null -eq $db.teacherCatalog) {
+        $db | Add-Member -NotePropertyName "teacherCatalog" -NotePropertyValue ([PSCustomObject]@{
+            college              = $newCatalog.college
+            anneeScolaire        = $newCatalog.anneeScolaire
+            courseTeachers       = @{}
+            classSubjectTeachers = @{}
+            classMaitre          = @{}
+        }) -Force
+    }
+    $cat = $db.teacherCatalog
+    if (-not [string]::IsNullOrWhiteSpace($newCatalog.college)) { $cat.college = $newCatalog.college }
+    if (-not [string]::IsNullOrWhiteSpace($newCatalog.anneeScolaire)) { $cat.anneeScolaire = $newCatalog.anneeScolaire }
+    $yr = if ($newCatalog.anneeScolaire) { $newCatalog.anneeScolaire.Trim() } else { "" }
+
+    $ctHash = @{}
+    if ($cat.courseTeachers -is [hashtable]) { foreach ($k in $cat.courseTeachers.Keys) { $ctHash[$k] = $cat.courseTeachers[$k] } }
+    elseif ($null -ne $cat.courseTeachers) { foreach ($p in $cat.courseTeachers.PSObject.Properties) { $ctHash[$p.Name] = $p.Value } }
+    foreach ($k in $newCatalog.courseTeachers.Keys) {
+        $ctHash[$k] = $newCatalog.courseTeachers[$k]
+        if ($yr -ne "") { $ctHash["$yr|$k"] = $newCatalog.courseTeachers[$k] }
+    }
+    $cat.courseTeachers = [PSCustomObject]$ctHash
+
+    $cstHash = @{}
+    if ($cat.classSubjectTeachers -is [hashtable]) { foreach ($k in $cat.classSubjectTeachers.Keys) { $cstHash[$k] = $cat.classSubjectTeachers[$k] } }
+    elseif ($null -ne $cat.classSubjectTeachers) { foreach ($p in $cat.classSubjectTeachers.PSObject.Properties) { $cstHash[$p.Name] = $p.Value } }
+    foreach ($k in $newCatalog.classSubjectTeachers.Keys) {
+        $cstHash[$k] = $newCatalog.classSubjectTeachers[$k]
+        if ($yr -ne "") { $cstHash["$yr|$k"] = $newCatalog.classSubjectTeachers[$k] }
+    }
+    $cat.classSubjectTeachers = [PSCustomObject]$cstHash
+
+    $cmHash = @{}
+    if ($cat.classMaitre -is [hashtable]) { foreach ($k in $cat.classMaitre.Keys) { $cmHash[$k] = $cat.classMaitre[$k] } }
+    elseif ($null -ne $cat.classMaitre) { foreach ($p in $cat.classMaitre.PSObject.Properties) { $cmHash[$p.Name] = $p.Value } }
+    foreach ($k in $newCatalog.classMaitre.Keys) {
+        $cmHash[$k] = $newCatalog.classMaitre[$k]
+        if ($yr -ne "") { $cmHash["$yr|$k"] = $newCatalog.classMaitre[$k] }
+    }
+    $cat.classMaitre = [PSCustomObject]$cmHash
+
+    # Also update existing students in DB
+    foreach ($st in $db.students) {
+        foreach ($yrRec in $st.history) {
+            Apply-TeacherCatalogToBulletin $yrRec $cat | Out-Null
+        }
+    }
+    return $db
+}
+
+function Import-DocumentsBatch([string[]]$filePaths, [string]$baseDir) {
+    $db = Load-Database $baseDir
+    $pdfBulletins = New-Object 'System.Collections.Generic.List[object]'
+    $notesRecords = New-Object 'System.Collections.Generic.List[object]'
+    $absencesRecords = New-Object 'System.Collections.Generic.List[object]'
+    $teachersParsedCount = 0
+
+    foreach ($fp in $filePaths) {
+        if (-not (Test-Path $fp)) { continue }
+        $ext = [System.IO.Path]::GetExtension($fp).ToLowerInvariant()
+        $origName = [System.IO.Path]::GetFileName($fp) -replace '^agy_upload_', ''
+
+        if ($ext -eq ".pdf") {
+            $extracted = Extract-BulletinsFromPdf $fp
+            foreach ($eb in $extracted) {
+                $eb.sourceFile = $origName
+                if ($null -ne $db.PSObject.Properties["teacherCatalog"] -and $null -ne $db.teacherCatalog) {
+                    Apply-TeacherCatalogToBulletin $eb $db.teacherCatalog | Out-Null
+                }
+                $pdfBulletins.Add($eb)
+            }
+        } elseif ($ext -eq ".xml") {
+            $rawXml = Read-FileSmartEncoding $fp
+            $parsedXml = Parse-NotesOrAbsencesXmlContent $rawXml $origName
+            if ($null -ne $parsedXml) {
+                if ($parsedXml.docType -eq "notes") {
+                    foreach ($r in $parsedXml.records) { $notesRecords.Add($r) }
+                } elseif ($parsedXml.docType -eq "absences") {
+                    foreach ($r in $parsedXml.records) { $absencesRecords.Add($r) }
+                }
+            }
+        } elseif ($ext -in @(".csv", ".txt", ".xls", ".xlsx")) {
+            $rawCsv = ""
+            if ($ext -in @(".xls", ".xlsx")) {
+                $rawCsv = Convert-ExcelToCsvString $fp
+            } else {
+                $rawCsv = Read-FileSmartEncoding $fp
+            }
+            if ($rawCsv -match '(?i)(LibelleCours|Maitre)') {
+                $parsedCsv = Parse-TeachersCsvContent $rawCsv
+                $db = Merge-TeacherCatalogIntoDb $db $parsedCsv
+                Save-Database $baseDir $db
+                $teachersParsedCount++
+            }
+        }
+    }
+
+    # Index absences by NoBDS and by Name+Niveau for fast O(1) lookup
+    $absByNum = @{}
+    $absByName = @{}
+    $usedAbsIndices = @{}
+    for ($ai = 0; $ai -lt $absencesRecords.Count; $ai++) {
+        $ar = $absencesRecords[$ai]
+        $nNum = Normalize-Identity $ar.numEleve
+        $nName = Normalize-Identity $ar.eleveNom
+        $nYr = if ($ar.anneeScolaire) { $ar.anneeScolaire } else { "" }
+        if ($nNum -ne "") { $absByNum["$nYr|$($ar.niveau)|$nNum"] = $ai }
+        if ($nName -ne "") { $absByName["$nYr|$($ar.niveau)|$nName"] = $ai }
+    }
+
+    $mergedXmlBulletins = New-Object 'System.Collections.Generic.List[object]'
+
+    foreach ($nr in $notesRecords) {
+        $normNum = Normalize-Identity $nr.numEleve
+        $normName = Normalize-Identity $nr.eleveNom
+        $nYr = if ($nr.anneeScolaire) { $nr.anneeScolaire } else { "" }
+        $matchedAi = $null
+        if ($normNum -ne "" -and $absByNum.ContainsKey("$nYr|$($nr.niveau)|$normNum")) {
+            $matchedAi = $absByNum["$nYr|$($nr.niveau)|$normNum"]
+        } elseif ($normName -ne "" -and $absByName.ContainsKey("$nYr|$($nr.niveau)|$normName")) {
+            $matchedAi = $absByName["$nYr|$($nr.niveau)|$normName"]
+        }
+        if ($null -ne $matchedAi -and -not $usedAbsIndices.ContainsKey($matchedAi)) {
+            $ar = $absencesRecords[$matchedAi]
+            $nr.absT1 = $ar.absT1
+            $nr.absT2 = $ar.absT2
+            $nr.absT3 = $ar.absT3
+            $nr.absTotal = $ar.absTotal
+            $nr.sourceFile = "$($nr.sourceFile) + $($ar.sourceFile)"
+            $usedAbsIndices[$matchedAi] = $true
+        }
+        if ($null -ne $db.PSObject.Properties["teacherCatalog"] -and $null -ne $db.teacherCatalog) {
+            if ([string]::IsNullOrWhiteSpace($nr.anneeScolaire) -and -not [string]::IsNullOrWhiteSpace($db.teacherCatalog.anneeScolaire)) {
+                $nr.anneeScolaire = $db.teacherCatalog.anneeScolaire
+            }
+            Apply-TeacherCatalogToBulletin $nr $db.teacherCatalog | Out-Null
+        }
+        $mergedXmlBulletins.Add($nr)
+    }
+
+    # Any absences records that were not paired with a notes file in this batch:
+    for ($ai = 0; $ai -lt $absencesRecords.Count; $ai++) {
+        if ($usedAbsIndices.ContainsKey($ai)) { continue }
+        $ar = $absencesRecords[$ai]
+        # Pre-fill from existing student in DB if present so review shows their class and grades
+        $normNum = Normalize-Identity $ar.numEleve
+        $normName = Normalize-Identity $ar.eleveNom
+        foreach ($st in $db.students) {
+            if (($normNum -ne "" -and (Normalize-Identity $st.numEleve) -eq $normNum) -or
+                ($normName -ne "" -and (Normalize-Identity $st.eleveNom) -eq $normName)) {
+                foreach ($yr in $st.history) {
+                    if ($yr.niveau -eq $ar.niveau) {
+                        $ar.classe = $yr.classe
+                        $ar.regroupement = $yr.regroupement
+                        $ar.maitre = $yr.maitre
+                        $ar.college = $yr.college
+                        if (-not [string]::IsNullOrWhiteSpace($yr.anneeScolaire)) { $ar.anneeScolaire = $yr.anneeScolaire }
+                        $ar.moyPrincipales = $yr.moyPrincipales
+                        $ar.moyGenerale = $yr.moyGenerale
+                        $ar.situation = $yr.situation
+                        $ar.orientation = $yr.orientation
+                        $ar.disciplines = $yr.disciplines
+                        break
+                    }
+                }
+                break
+            }
+        }
+        $mergedXmlBulletins.Add($ar)
+    }
+
+    $autoSavedCount = 0
+    $xmlArr = $mergedXmlBulletins.ToArray()
+    if ($xmlArr.Count -gt 0) {
+        $db = Upsert-BulletinRecordsBatch $db $xmlArr
+        Save-Database $baseDir $db
+        $autoSavedCount = $xmlArr.Count
+    }
+
+    $pdfArr = $pdfBulletins.ToArray()
+    for ($i = 0; $i -lt $pdfArr.Count; $i++) {
+        $pdfArr[$i].pageNumber = ($i + 1)
+    }
+
+    return [PSCustomObject]@{
+        bulletins           = $pdfArr
+        autoSavedCount      = $autoSavedCount
+        teachersParsedCount = $teachersParsedCount
+        db                  = $db
+    }
+}
+
+function Upsert-BulletinRecordsBatch($db, $bulletins) {
+    $studentList = New-Object 'System.Collections.Generic.List[object]'
+    $byNum = @{}
+    $byName = @{}
+    foreach ($st in $db.students) {
+        $studentList.Add($st)
+        $nNum = Normalize-Identity $st.numEleve
+        $nName = Normalize-Identity $st.eleveNom
+        if ($nNum -ne "") { $byNum[$nNum] = $st }
+        if ($nName -ne "") { $byName[$nName] = $st }
+    }
+
+    foreach ($b in $bulletins) {
+        $normNum = Normalize-Identity $b.numEleve
+        $normName = Normalize-Identity $b.eleveNom
+
+        if ($null -ne $db.PSObject.Properties["teacherCatalog"] -and $null -ne $db.teacherCatalog) {
+            Apply-TeacherCatalogToBulletin $b $db.teacherCatalog | Out-Null
+        }
+
+        $matchedStudent = $null
+        if ($normNum -ne "" -and $byNum.ContainsKey($normNum)) {
+            $matchedStudent = $byNum[$normNum]
+        } elseif ($normName -ne "" -and $byName.ContainsKey($normName)) {
+            $matchedStudent = $byName[$normName]
+        }
+
+        if ($null -eq $matchedStudent) {
+            $newId = [Guid]::NewGuid().ToString("N").Substring(0, 10)
+            $matchedStudent = [PSCustomObject]@{
+                id = $newId
+                eleveNom = if ($b.eleveNom) { $b.eleveNom.Trim() } else { "" }
+                numEleve = if ($b.numEleve) { $b.numEleve.Trim() } else { "" }
+                classeActuelle = if ($b.classe) { $b.classe.Trim() } else { "" }
+                niveauActuel = if ($b.niveau) { $b.niveau.Trim() } else { "" }
+                anneeActuelle = if ($b.anneeScolaire) { $b.anneeScolaire.Trim() } else { "" }
+                commentaires = ""
+                history = @()
+            }
+            $studentList.Add($matchedStudent)
+            if ($normNum -ne "") { $byNum[$normNum] = $matchedStudent }
+            if ($normName -ne "") { $byName[$normName] = $matchedStudent }
+        } else {
+            if (-not [string]::IsNullOrWhiteSpace($b.eleveNom)) { $matchedStudent.eleveNom = $b.eleveNom.Trim() }
+            if (-not [string]::IsNullOrWhiteSpace($b.numEleve)) {
+                $matchedStudent.numEleve = $b.numEleve.Trim()
+                if ($normNum -ne "") { $byNum[$normNum] = $matchedStudent }
+            }
+        }
+
+        $history = @($matchedStudent.history)
+        $matchedYear = $null
+        foreach ($yr in $history) {
+            if ($yr.anneeScolaire -eq $b.anneeScolaire -and $yr.niveau -eq $b.niveau) {
+                $matchedYear = $yr
+                break
+            }
+        }
+
+        if ($null -eq $matchedYear) {
+            $normalizedDiscs = New-Object 'System.Collections.Generic.List[object]'
+            foreach ($newD in $b.disciplines) {
+                if ([string]::IsNullOrWhiteSpace($newD.discipline)) { continue }
+                $profVal = if ($null -ne $newD.PSObject.Properties["professeur"] -and $newD.professeur) { $newD.professeur } else { "" }
+                $codeVal = if ($null -ne $newD.PSObject.Properties["codeCours"] -and $newD.codeCours) { $newD.codeCours } else { "" }
+                $normalizedDiscs.Add([PSCustomObject]@{
+                    codeCours  = $codeVal
+                    discipline = $newD.discipline
+                    professeur = $profVal
+                    principale = [bool]$newD.principale
+                    t1         = $newD.t1
+                    t2         = $newD.t2
+                    t3         = $newD.t3
+                    moyenne    = $newD.moyenne
+                })
+            }
+            $matchedYear = [PSCustomObject]@{
+                anneeScolaire = $b.anneeScolaire
+                niveau = $b.niveau
+                classe = $b.classe
+                regroupement = $b.regroupement
+                maitre = $b.maitre
+                college = $b.college
+                moyPrincipales = $b.moyPrincipales
+                moyGenerale = $b.moyGenerale
+                situation = $b.situation
+                orientation = $b.orientation
+                absT1 = $b.absT1
+                absT2 = $b.absT2
+                absT3 = $b.absT3
+                absTotal = $b.absTotal
+                disciplines = $normalizedDiscs.ToArray()
+                updatedAt = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            }
+            $history += $matchedYear
+        } else {
+            if (-not [string]::IsNullOrWhiteSpace($b.classe)) { $matchedYear.classe = $b.classe }
+            if (-not [string]::IsNullOrWhiteSpace($b.regroupement)) { $matchedYear.regroupement = $b.regroupement }
+            if (-not [string]::IsNullOrWhiteSpace($b.maitre)) { $matchedYear.maitre = $b.maitre }
+            if (-not [string]::IsNullOrWhiteSpace($b.college)) { $matchedYear.college = $b.college }
+            if (-not [string]::IsNullOrWhiteSpace($b.moyPrincipales)) { $matchedYear.moyPrincipales = $b.moyPrincipales }
+            if (-not [string]::IsNullOrWhiteSpace($b.moyGenerale)) { $matchedYear.moyGenerale = $b.moyGenerale }
+            if (-not [string]::IsNullOrWhiteSpace($b.situation)) { $matchedYear.situation = $b.situation }
+            if (-not [string]::IsNullOrWhiteSpace($b.orientation)) { $matchedYear.orientation = $b.orientation }
+            if (-not [string]::IsNullOrWhiteSpace($b.absT1)) { $matchedYear.absT1 = $b.absT1 }
+            if (-not [string]::IsNullOrWhiteSpace($b.absT2)) { $matchedYear.absT2 = $b.absT2 }
+            if (-not [string]::IsNullOrWhiteSpace($b.absT3)) { $matchedYear.absT3 = $b.absT3 }
+            if (-not [string]::IsNullOrWhiteSpace($b.absTotal)) { $matchedYear.absTotal = $b.absTotal }
+            $matchedYear.updatedAt = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+
+            $existingDiscs = New-Object 'System.Collections.Generic.List[object]'
+            foreach ($ed in $matchedYear.disciplines) { $existingDiscs.Add($ed) }
+            foreach ($newD in $b.disciplines) {
+                if ([string]::IsNullOrWhiteSpace($newD.discipline)) { continue }
+                $profVal = if ($null -ne $newD.PSObject.Properties["professeur"] -and $newD.professeur) { $newD.professeur } else { "" }
+                $codeVal = if ($null -ne $newD.PSObject.Properties["codeCours"] -and $newD.codeCours) { $newD.codeCours } else { "" }
+                $foundD = $null
+                foreach ($ed in $existingDiscs) {
+                    if ((Normalize-Identity $ed.discipline) -eq (Normalize-Identity $newD.discipline)) {
+                        $foundD = $ed
+                        break
+                    }
+                }
+                if ($null -eq $foundD) {
+                    $existingDiscs.Add([PSCustomObject]@{
+                        codeCours  = $codeVal
+                        discipline = $newD.discipline
+                        professeur = $profVal
+                        principale = [bool]$newD.principale
+                        t1 = $newD.t1
+                        t2 = $newD.t2
+                        t3 = $newD.t3
+                        moyenne = $newD.moyenne
+                    })
+                } else {
+                    $foundD.principale = [bool]$newD.principale
+                    if ($null -eq $foundD.PSObject.Properties["professeur"]) {
+                        $foundD | Add-Member -NotePropertyName "professeur" -NotePropertyValue "" -Force
+                    }
+                    if ($null -eq $foundD.PSObject.Properties["codeCours"]) {
+                        $foundD | Add-Member -NotePropertyName "codeCours" -NotePropertyValue "" -Force
+                    }
+                    if (-not [string]::IsNullOrWhiteSpace($profVal)) { $foundD.professeur = $profVal }
+                    if (-not [string]::IsNullOrWhiteSpace($codeVal)) { $foundD.codeCours = $codeVal }
+                    if (-not [string]::IsNullOrWhiteSpace($newD.t1)) { $foundD.t1 = $newD.t1 }
+                    if (-not [string]::IsNullOrWhiteSpace($newD.t2)) { $foundD.t2 = $newD.t2 }
+                    if (-not [string]::IsNullOrWhiteSpace($newD.t3)) { $foundD.t3 = $newD.t3 }
+                    if (-not [string]::IsNullOrWhiteSpace($newD.moyenne)) { $foundD.moyenne = $newD.moyenne }
+                }
+            }
+            $matchedYear.disciplines = $existingDiscs.ToArray()
+        }
+
+        if ($null -ne $db.PSObject.Properties["teacherCatalog"] -and $null -ne $db.teacherCatalog) {
+            Apply-TeacherCatalogToBulletin $matchedYear $db.teacherCatalog | Out-Null
+        }
+
+        $matchedStudent.history = @($history | Sort-Object anneeScolaire, niveau)
+        $latestYear = $matchedStudent.history[-1]
+        $matchedStudent.classeActuelle = $latestYear.classe
+        $matchedStudent.niveauActuel = $latestYear.niveau
+        $matchedStudent.anneeActuelle = $latestYear.anneeScolaire
+    }
+
+    $db.students = @($studentList.ToArray() | Sort-Object eleveNom)
+    return $db
+}
+
 function Upsert-BulletinRecord($db, $b) {
     $students = @($db.students)
     $normNum = Normalize-Identity $b.numEleve
     $normName = Normalize-Identity $b.eleveNom
+
+    if ($null -ne $db.PSObject.Properties["teacherCatalog"] -and $null -ne $db.teacherCatalog) {
+        Apply-TeacherCatalogToBulletin $b $db.teacherCatalog | Out-Null
+    }
 
     $matchedStudent = $null
     foreach ($st in $students) {
@@ -447,11 +1369,11 @@ function Upsert-BulletinRecord($db, $b) {
         $newId = [Guid]::NewGuid().ToString("N").Substring(0, 10)
         $matchedStudent = [PSCustomObject]@{
             id = $newId
-            eleveNom = $b.eleveNom.Trim()
-            numEleve = $b.numEleve.Trim()
-            classeActuelle = $b.classe.Trim()
-            niveauActuel = $b.niveau.Trim()
-            anneeActuelle = $b.anneeScolaire.Trim()
+            eleveNom = if ($b.eleveNom) { $b.eleveNom.Trim() } else { "" }
+            numEleve = if ($b.numEleve) { $b.numEleve.Trim() } else { "" }
+            classeActuelle = if ($b.classe) { $b.classe.Trim() } else { "" }
+            niveauActuel = if ($b.niveau) { $b.niveau.Trim() } else { "" }
+            anneeActuelle = if ($b.anneeScolaire) { $b.anneeScolaire.Trim() } else { "" }
             commentaires = ""
             history = @()
         }
@@ -471,6 +1393,22 @@ function Upsert-BulletinRecord($db, $b) {
     }
 
     if ($null -eq $matchedYear) {
+        $normalizedDiscs = @()
+        foreach ($newD in $b.disciplines) {
+            if ([string]::IsNullOrWhiteSpace($newD.discipline)) { continue }
+            $profVal = if ($null -ne $newD.PSObject.Properties["professeur"] -and $newD.professeur) { $newD.professeur } else { "" }
+            $codeVal = if ($null -ne $newD.PSObject.Properties["codeCours"] -and $newD.codeCours) { $newD.codeCours } else { "" }
+            $normalizedDiscs += [PSCustomObject]@{
+                codeCours  = $codeVal
+                discipline = $newD.discipline
+                professeur = $profVal
+                principale = [bool]$newD.principale
+                t1         = $newD.t1
+                t2         = $newD.t2
+                t3         = $newD.t3
+                moyenne    = $newD.moyenne
+            }
+        }
         $matchedYear = [PSCustomObject]@{
             anneeScolaire = $b.anneeScolaire
             niveau = $b.niveau
@@ -486,7 +1424,7 @@ function Upsert-BulletinRecord($db, $b) {
             absT2 = $b.absT2
             absT3 = $b.absT3
             absTotal = $b.absTotal
-            disciplines = @($b.disciplines)
+            disciplines = $normalizedDiscs
             updatedAt = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
         }
         $history += $matchedYear
@@ -508,6 +1446,8 @@ function Upsert-BulletinRecord($db, $b) {
         $existingDiscs = @($matchedYear.disciplines)
         foreach ($newD in $b.disciplines) {
             if ([string]::IsNullOrWhiteSpace($newD.discipline)) { continue }
+            $profVal = if ($null -ne $newD.PSObject.Properties["professeur"] -and $newD.professeur) { $newD.professeur } else { "" }
+            $codeVal = if ($null -ne $newD.PSObject.Properties["codeCours"] -and $newD.codeCours) { $newD.codeCours } else { "" }
             $foundD = $null
             foreach ($ed in $existingDiscs) {
                 if ((Normalize-Identity $ed.discipline) -eq (Normalize-Identity $newD.discipline)) {
@@ -517,7 +1457,9 @@ function Upsert-BulletinRecord($db, $b) {
             }
             if ($null -eq $foundD) {
                 $existingDiscs += [PSCustomObject]@{
+                    codeCours  = $codeVal
                     discipline = $newD.discipline
+                    professeur = $profVal
                     principale = [bool]$newD.principale
                     t1 = $newD.t1
                     t2 = $newD.t2
@@ -526,6 +1468,14 @@ function Upsert-BulletinRecord($db, $b) {
                 }
             } else {
                 $foundD.principale = [bool]$newD.principale
+                if ($null -eq $foundD.PSObject.Properties["professeur"]) {
+                    $foundD | Add-Member -NotePropertyName "professeur" -NotePropertyValue "" -Force
+                }
+                if ($null -eq $foundD.PSObject.Properties["codeCours"]) {
+                    $foundD | Add-Member -NotePropertyName "codeCours" -NotePropertyValue "" -Force
+                }
+                if (-not [string]::IsNullOrWhiteSpace($profVal)) { $foundD.professeur = $profVal }
+                if (-not [string]::IsNullOrWhiteSpace($codeVal)) { $foundD.codeCours = $codeVal }
                 if (-not [string]::IsNullOrWhiteSpace($newD.t1)) { $foundD.t1 = $newD.t1 }
                 if (-not [string]::IsNullOrWhiteSpace($newD.t2)) { $foundD.t2 = $newD.t2 }
                 if (-not [string]::IsNullOrWhiteSpace($newD.t3)) { $foundD.t3 = $newD.t3 }
@@ -533,6 +1483,10 @@ function Upsert-BulletinRecord($db, $b) {
             }
         }
         $matchedYear.disciplines = $existingDiscs
+    }
+
+    if ($null -ne $db.PSObject.Properties["teacherCatalog"] -and $null -ne $db.teacherCatalog) {
+        Apply-TeacherCatalogToBulletin $matchedYear $db.teacherCatalog | Out-Null
     }
 
     $matchedStudent.history = @($history | Sort-Object anneeScolaire, niveau)
@@ -585,20 +1539,26 @@ function New-GradeCell([string]$val, [bool]$isBoldMoyenne = $false) {
     return $c
 }
 
-function Export-CohortExcelReport($db, [string]$targetClasse, [string]$outputPath) {
+function Export-CohortExcelReport($db, [string]$targetClasse, [string]$outputPath, [string]$targetAnnee = "TOUTES") {
     $allStudents = @($db.students)
     $cohort = @()
-    if ([string]::IsNullOrWhiteSpace($targetClasse) -or $targetClasse -eq "TOUTES") {
+    $filterByYr = (-not [string]::IsNullOrWhiteSpace($targetAnnee) -and $targetAnnee -ne "TOUTES")
+    $filterByCls = (-not [string]::IsNullOrWhiteSpace($targetClasse) -and $targetClasse -ne "TOUTES")
+
+    if (-not $filterByYr -and -not $filterByCls) {
         $cohort = $allStudents
     } else {
         foreach ($st in $allStudents) {
-            $inClass = ($st.classeActuelle -eq $targetClasse)
-            if (-not $inClass) {
-                foreach ($h in $st.history) {
-                    if ($h.classe -eq $targetClasse) { $inClass = $true; break }
+            $matched = $false
+            foreach ($h in $st.history) {
+                $yrOk = (-not $filterByYr) -or ($h.anneeScolaire -eq $targetAnnee)
+                $clsOk = (-not $filterByCls) -or ($h.classe -eq $targetClasse)
+                if ($yrOk -and $clsOk) {
+                    $matched = $true
+                    break
                 }
             }
-            if ($inClass) { $cohort += $st }
+            if ($matched) { $cohort += $st }
         }
     }
 
@@ -616,10 +1576,11 @@ function Export-CohortExcelReport($db, [string]$targetClasse, [string]$outputPat
 
     $rTitle = New-Object ClasseursRouges.ExcelRow
     $rTitle.Height = 28.0
-    $titleLabel = if ([string]::IsNullOrWhiteSpace($targetClasse) -or $targetClasse -eq "TOUTES") {
-        "CLASSEURS ROUGES - SYNTHESE PLURIANNUELLE (9CO / 10CO / 11CO) - TOUTES LES CLASSES"
+    $yrTag = if ($filterByYr) { " - ANNEE $targetAnnee" } else { "" }
+    $titleLabel = if (-not $filterByCls) {
+        "CLASSEURS ROUGES - SYNTHESE PLURIANNUELLE (9CO / 10CO / 11CO)$yrTag - TOUTES LES CLASSES"
     } else {
-        "CLASSEURS ROUGES - SYNTHESE DE LA COHORTE : CLASSE $targetClasse (9CO / 10CO / 11CO)"
+        "CLASSEURS ROUGES - SYNTHESE DE LA COHORTE : CLASSE $targetClasse$yrTag (9CO / 10CO / 11CO)"
     }
     $rTitle.Cells.Add((New-ExcelCell $titleLabel 8))
     $shSynth.Rows.Add($rTitle)
@@ -836,10 +1797,12 @@ function Export-CohortExcelReport($db, [string]$targetClasse, [string]$outputPat
 
             foreach ($d in $rec.disciplines) {
                 $rD = New-Object ClasseursRouges.ExcelRow
-                $rD.Height = 19.5
+                $profStr = if ($null -ne $d.PSObject.Properties["professeur"] -and -not [string]::IsNullOrWhiteSpace($d.professeur)) { $d.professeur.Trim() } else { "" }
+                $rD.Height = if ($profStr -ne "") { 29.0 } else { 19.5 }
                 $cat = if ($d.principale) { "Principale" } else { "Autre discipline" }
                 $styleDisc = if ($d.principale) { 9 } else { 0 }
-                $rD.Cells.Add((New-ExcelCell $d.discipline $styleDisc))
+                $discCellText = if ($profStr -ne "") { "$($d.discipline)`n$profStr" } else { $d.discipline }
+                $rD.Cells.Add((New-ExcelCell $discCellText $styleDisc))
                 $rD.Cells.Add((New-ExcelCell $cat 0))
                 $rD.Cells.Add((New-GradeCell $d.t1 $false))
                 $rD.Cells.Add((New-GradeCell $d.t2 $false))

@@ -191,7 +191,7 @@ namespace ClasseursRouges
             "<cellStyleXfs count=\"1\"><xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"0\"/></cellStyleXfs>" +
             "<cellXfs count=\"10\">" +
                 // 0: Normal text left bordered
-                "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"1\" applyFont=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment vertical=\"center\" horizontal=\"left\"/></xf>" +
+                "<xf numFmtId=\"0\" fontId=\"0\" fillId=\"0\" borderId=\"1\" applyFont=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment vertical=\"center\" horizontal=\"left\" wrapText=\"1\"/></xf>" +
                 // 1: Header dark red bold white centered
                 "<xf numFmtId=\"0\" fontId=\"1\" fillId=\"2\" borderId=\"1\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment vertical=\"center\" horizontal=\"center\" wrapText=\"1\"/></xf>" +
                 // 2: Subheader slate bold centered
@@ -209,7 +209,7 @@ namespace ClasseursRouges
                 // 8: Section title bold red left no border
                 "<xf numFmtId=\"0\" fontId=\"5\" fillId=\"0\" borderId=\"0\" applyFont=\"1\" applyAlignment=\"1\"><alignment vertical=\"center\" horizontal=\"left\"/></xf>" +
                 // 9: Principal discipline name bold left bordered
-                "<xf numFmtId=\"0\" fontId=\"6\" fillId=\"5\" borderId=\"1\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment vertical=\"center\" horizontal=\"left\"/></xf>" +
+                "<xf numFmtId=\"0\" fontId=\"6\" fillId=\"5\" borderId=\"1\" applyFont=\"1\" applyFill=\"1\" applyBorder=\"1\" applyAlignment=\"1\"><alignment vertical=\"center\" horizontal=\"left\" wrapText=\"1\"/></xf>" +
             "</cellXfs>" +
             "</styleSheet>";
         }
@@ -251,6 +251,22 @@ namespace ClasseursRouges
                             sb.AppendFormat(CultureInfo.InvariantCulture, "<c r=\"{0}\" s=\"{1}\"><v>{2}</v></c>", cellRef, cell.StyleIndex, num);
                             continue;
                         }
+                    }
+                    if ((cell.StyleIndex == 0 || cell.StyleIndex == 9) && val.Contains("\n"))
+                    {
+                        int nlIdx = val.IndexOf('\n');
+                        string line1 = val.Substring(0, nlIdx).TrimEnd('\r');
+                        string line2 = val.Substring(nlIdx + 1).TrimStart('\r');
+                        string boldTag = (cell.StyleIndex == 9) ? "<b/>" : "";
+                        string color1 = (cell.StyleIndex == 9) ? "FF0F172A" : "FF1E293B";
+                        sb.AppendFormat(
+                            "<c r=\"{0}\" s=\"{1}\" t=\"inlineStr\"><is>" +
+                            "<r><rPr>{2}<sz val=\"10\"/><color rgb=\"{3}\"/><rFont val=\"Segoe UI\"/></rPr><t>{4}</t></r>" +
+                            "<r><rPr><i/><sz val=\"8.5\"/><color rgb=\"FF64748B\"/><rFont val=\"Segoe UI\"/></rPr><t xml:space=\"preserve\">&#10;{5}</t></r>" +
+                            "</is></c>",
+                            cellRef, cell.StyleIndex, boldTag, color1, EscapeXml(line1), EscapeXml(line2)
+                        );
+                        continue;
                     }
                     sb.AppendFormat("<c r=\"{0}\" s=\"{1}\" t=\"inlineStr\"><is><t>{2}</t></is></c>", cellRef, cell.StyleIndex, EscapeXml(val));
                 }
