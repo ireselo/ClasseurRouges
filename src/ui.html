@@ -187,6 +187,12 @@
     border-color: #FECACA;
   }
   .btn-danger:hover { background: #FEF2F2; }
+  .btn-amber {
+    background: var(--amber-100);
+    color: var(--amber-700);
+    border-color: #FCD34D;
+  }
+  .btn-amber:hover { background: #FDE68A; }
   .btn-sm { padding: 5px 10px; font-size: 12px; }
 
   input[type="text"], select, textarea {
@@ -432,6 +438,59 @@
     display: none;
     z-index: 9998;
   }
+  /* Modal Fin d'Annee 11CO */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9995;
+    padding: 20px;
+  }
+  .modal-overlay.active { display: flex; }
+  .modal-card {
+    background: #fff;
+    border-radius: 12px;
+    width: 100%;
+    max-width: 780px;
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 45px rgba(0,0,0,0.3);
+    overflow: hidden;
+  }
+  .modal-header {
+    padding: 18px 22px;
+    background: var(--slate-900);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .modal-header h3 { font-size: 16px; font-weight: 700; }
+  .modal-body {
+    padding: 18px 22px;
+    overflow-y: auto;
+    flex: 1;
+  }
+  .modal-footer {
+    padding: 14px 22px;
+    background: var(--slate-50);
+    border-top: 1px solid var(--slate-200);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .repeat-row {
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .repeat-row.selected td {
+    background: var(--amber-100) !important;
+  }
 </style>
 </head>
 <body>
@@ -473,6 +532,7 @@
       <div class="topbar-title" id="topbar-title">Importation et Vérification des Bulletins Scolaires</div>
       <div class="topbar-actions">
         <button class="btn btn-secondary" onclick="triggerImportDialog()">📂 Charger PDF(s)</button>
+        <button class="btn btn-amber" onclick="openEndSchoolYearModal()" title="Supprimer les élèves de 11CO qui partent et garder les redoublants">🎓 Fin d'année (Élèves 11CO)</button>
         <button class="btn btn-success" onclick="exportCurrentCohortExcel()">📗 Exporter le Rapport Excel (.xlsx)</button>
       </div>
     </header>
@@ -789,6 +849,66 @@
   </div>
 
   <div class="toast" id="toast"></div>
+
+  <!-- Modal Fin d'année scolaire (Élèves de 11CO) -->
+  <div class="modal-overlay" id="end-year-modal" onclick="if(event.target===this) closeEndSchoolYearModal()">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h3>🎓 Fin d'année scolaire — Tri des élèves de 11CO</h3>
+          <div style="font-size:12px; color:var(--slate-300); margin-top:3px;">
+            Sélectionnez les élèves qui <strong>redoublent en 11CO</strong> afin de conserver leur dossier.
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="closeEndSchoolYearModal()">✕ Fermer</button>
+      </div>
+
+      <div class="modal-body">
+        <div style="background:var(--red-soft); border:1px solid #FECACA; color:var(--red-dark); padding:11px 14px; border-radius:8px; font-size:12.5px; margin-bottom:14px; line-height:1.45;">
+          ⚠️ <strong>Attention :</strong> Tous les élèves de <strong>11CO non cochés</strong> (qui quittent le Cycle d'Orientation) seront <strong>effacés</strong> de la base de données.<br>
+          Les élèves <strong>cochés (redoublants en 11CO)</strong> ainsi que tous les élèves de <strong>9CO et 10CO</strong> seront intégralement conservés. <em>(Une copie de sauvegarde automatique est créée dans <code>data/backups/</code>).</em>
+        </div>
+
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+          <div style="display:flex; align-items:center; gap:8px; flex:1;">
+            <select id="end-year-class-filter" onchange="renderEndYearStudentList()" style="min-width:160px; font-weight:600;"></select>
+            <input type="text" id="end-year-search" placeholder="🔍 Rechercher un élève de 11CO..." oninput="renderEndYearStudentList()" style="flex:1; min-width:180px;">
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button class="btn btn-secondary btn-sm" onclick="autoSelectNonPromus11()" title="Cocher automatiquement les élèves dont la situation indique non promu / redouble">⚡ Cocher les « non promus »</button>
+            <button class="btn btn-secondary btn-sm" onclick="clearAllRepeating11()">Tout décocher</button>
+          </div>
+        </div>
+
+        <div class="table-wrap" style="max-height:42vh; overflow-y:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th class="center" style="width:130px;">Redouble en 11CO ?</th>
+                <th>Nom et Prénom de l'élève</th>
+                <th class="center">N° Élève</th>
+                <th class="center">Classe 11CO</th>
+                <th class="center">Moy. Gén.</th>
+                <th>Situation</th>
+                <th class="center">Action prévue</th>
+              </tr>
+            </thead>
+            <tbody id="end-year-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div id="end-year-summary" style="font-size:13px; color:var(--slate-700);"></div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn btn-secondary" onclick="closeEndSchoolYearModal()">Annuler</button>
+          <button class="btn btn-primary" id="btn-confirm-end-year" onclick="confirmEndSchoolYear11()">
+            🗑️ Supprimer les sortants et garder les redoublants
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
 
 <script>
   let appDb = { students: [] };
@@ -1594,6 +1714,198 @@
         showToast("📗 Rapport Excel (.xlsx) généré et ouvert !");
       } else {
         alert("Erreur lors de l'export Excel : " + data.error);
+      }
+    } catch (e) {
+      hideLoader();
+      alert("Erreur : " + e.message);
+    }
+  }
+
+  // ===========================================================================
+  // FIN D'ANNEE SCOLAIRE : SUPPRIMER LES 11CO SORTANTS & GARDER LES REDOUBLANTS
+  // ===========================================================================
+  let repeating11SelectedIds = new Set();
+
+  function isStudent11CO(st) {
+    if (!st) return false;
+    if (st.niveauActuel === '11CO') return true;
+    if (/^11/.test(st.classeActuelle || '')) return true;
+    return (st.history || []).some(h => h.niveau === '11CO');
+  }
+
+  function get11COStudents() {
+    return (appDb.students || []).filter(isStudent11CO);
+  }
+
+  function getLatest11Record(st) {
+    const recs11 = (st.history || []).filter(h => h.niveau === '11CO');
+    if (recs11.length > 0) return recs11[recs11.length - 1];
+    const hist = st.history || [];
+    return hist.length > 0 ? hist[hist.length - 1] : {};
+  }
+
+  function openEndSchoolYearModal() {
+    const students11 = get11COStudents();
+    if (students11.length === 0) {
+      alert("Aucun élève de 11CO n'est actuellement enregistré dans la base de données.");
+      return;
+    }
+
+    repeating11SelectedIds = new Set();
+
+    // Populate 11CO class filter
+    const classesSet = new Set();
+    students11.forEach(st => {
+      const r11 = getLatest11Record(st);
+      const cls = r11.classe || st.classeActuelle;
+      if (cls) classesSet.add(cls);
+    });
+    const sortedClasses = Array.from(classesSet).sort();
+    const sel = document.getElementById('end-year-class-filter');
+    sel.innerHTML = `<option value="TOUTES">Toutes les classes 11CO (${students11.length})</option>` +
+      sortedClasses.map(c => `<option value="${escapeHtml(c)}">Classe ${escapeHtml(c)}</option>`).join('');
+
+    document.getElementById('end-year-search').value = '';
+    renderEndYearStudentList();
+    document.getElementById('end-year-modal').classList.add('active');
+  }
+
+  function closeEndSchoolYearModal() {
+    document.getElementById('end-year-modal').classList.remove('active');
+  }
+
+  function toggleRepeating11Student(studentId) {
+    if (repeating11SelectedIds.has(studentId)) {
+      repeating11SelectedIds.delete(studentId);
+    } else {
+      repeating11SelectedIds.add(studentId);
+    }
+    renderEndYearStudentList();
+  }
+
+  function autoSelectNonPromus11() {
+    const students11 = get11COStudents();
+    let added = 0;
+    students11.forEach(st => {
+      const r11 = getLatest11Record(st);
+      if (/non\s*promu|redoubl/i.test(r11.situation || '') || /redoubl/i.test(r11.orientation || '')) {
+        repeating11SelectedIds.add(st.id);
+        added++;
+      }
+    });
+    renderEndYearStudentList();
+    if (added === 0) {
+      showToast("ℹ️ Aucun élève de 11CO n'a la mention « non promu » détectée. Cochez-les manuellement.");
+    } else {
+      showToast(`✅ ${added} élève(s) non promu(s) coché(s) comme redoublant(s).`);
+    }
+  }
+
+  function clearAllRepeating11() {
+    repeating11SelectedIds.clear();
+    renderEndYearStudentList();
+  }
+
+  function renderEndYearStudentList() {
+    const all11 = get11COStudents();
+    const clsFilter = document.getElementById('end-year-class-filter').value || 'TOUTES';
+    const q = (document.getElementById('end-year-search').value || '').trim().toLowerCase();
+
+    const filtered = all11.filter(st => {
+      const r11 = getLatest11Record(st);
+      const cls = r11.classe || st.classeActuelle || '';
+      if (clsFilter !== 'TOUTES' && cls !== clsFilter) return false;
+      if (!q) return true;
+      return (st.eleveNom || '').toLowerCase().includes(q) ||
+             (st.numEleve || '').toLowerCase().includes(q) ||
+             cls.toLowerCase().includes(q);
+    });
+
+    const tbody = document.getElementById('end-year-tbody');
+    if (filtered.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="7" class="center" style="padding:20px; color:var(--slate-500);">Aucun élève de 11CO ne correspond à ce filtre.</td></tr>`;
+    } else {
+      tbody.innerHTML = filtered.map(st => {
+        const isChecked = repeating11SelectedIds.has(st.id);
+        const r11 = getLatest11Record(st);
+        const cls = r11.classe || st.classeActuelle || '—';
+        const sit = r11.situation || '—';
+        const actionBadge = isChecked
+          ? `<span class="badge badge-amber">🔄 Gardé (Redouble 11CO)</span>`
+          : `<span class="badge badge-red">🗑️ Sera supprimé (Sortant)</span>`;
+
+        return `<tr class="repeat-row ${isChecked ? 'selected' : ''}" onclick="toggleRepeating11Student('${st.id}')">
+          <td class="center" onclick="event.stopPropagation()">
+            <label style="display:inline-flex; align-items:center; gap:6px; cursor:pointer; font-weight:700; color:${isChecked ? 'var(--amber-700)' : 'var(--slate-600)'};">
+              <input type="checkbox" ${isChecked ? 'checked' : ''} onchange="toggleRepeating11Student('${st.id}')" style="width:16px; height:16px; cursor:pointer;">
+              ${isChecked ? 'Oui (Garde)' : 'Non'}
+            </label>
+          </td>
+          <td style="font-weight:700; color:var(--slate-900);">${escapeHtml(st.eleveNom)}</td>
+          <td class="center">${escapeHtml(st.numEleve || '—')}</td>
+          <td class="center"><span class="badge badge-slate">${escapeHtml(cls)}</span></td>
+          <td class="center">${formatGradeCellHtml(r11.moyGenerale, true)}</td>
+          <td>${escapeHtml(sit)}</td>
+          <td class="center">${actionBadge}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    const keptCount = all11.filter(st => repeating11SelectedIds.has(st.id)).length;
+    const deleteCount = all11.length - keptCount;
+    const keptNames = all11.filter(st => repeating11SelectedIds.has(st.id)).map(st => st.eleveNom);
+
+    document.getElementById('end-year-summary').innerHTML = `
+      <div>
+        Total 11CO : <strong>${all11.length}</strong> &nbsp;|&nbsp;
+        <span style="color:var(--amber-700); font-weight:700;">🔄 Redoublants conservés : ${keptCount}</span> &nbsp;|&nbsp;
+        <span style="color:#DC2626; font-weight:700;">🗑️ Sortants supprimés : ${deleteCount}</span>
+      </div>
+      ${keptNames.length > 0 ? `<div style="font-size:11.5px; color:var(--slate-600); margin-top:3px;">Redoublants sélectionnés : <strong>${escapeHtml(keptNames.join(', '))}</strong></div>` : ''}
+    `;
+
+    document.getElementById('btn-confirm-end-year').textContent =
+      `🗑️ Supprimer ${deleteCount} sortant(s) et garder ${keptCount} redoublant(s)`;
+  }
+
+  async function confirmEndSchoolYear11() {
+    const all11 = get11COStudents();
+    const repeatingList = all11.filter(st => repeating11SelectedIds.has(st.id));
+    const leavingCount = all11.length - repeatingList.length;
+
+    const repMsg = repeatingList.length > 0
+      ? `\n\n🔄 Élèves de 11CO CONSERVÉS (redoublants : ${repeatingList.length}) :\n- ${repeatingList.map(s => s.eleveNom).join('\n- ')}`
+      : `\n\n🔄 Aucun élève de 11CO sélectionné comme redoublant (0 conservé).`;
+
+    const confirmText =
+      `Confirmez-vous la clôture de l'année scolaire pour les 11CO ?\n\n` +
+      `🗑️ ${leavingCount} élève(s) de 11CO sortant(s) seront SUPPRIMÉS de la base.` +
+      repMsg +
+      `\n\n(Les élèves de 9CO et 10CO restent intacts et une sauvegarde automatique est créée dans data/backups/).`;
+
+    if (!confirm(confirmText)) return;
+
+    showLoader("Clôture de l'année scolaire et nettoyage des 11CO sortants…");
+    try {
+      const res = await fetch('/api/end-school-year', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          repeatingStudentIds: Array.from(repeating11SelectedIds)
+        })
+      });
+      const data = await res.json();
+      hideLoader();
+      if (data.ok) {
+        appDb = data.db;
+        closeEndSchoolYearModal();
+        populateClassFilterDropdown();
+        populateStudentSelectDropdown();
+        renderCohortView();
+        renderSingleStudentFicha();
+        showToast(`✅ Fin d'année effectuée : ${data.deletedCount} sortant(s) 11CO supprimé(s), ${data.keptCount} redoublant(s) conservé(s).`);
+      } else {
+        alert("Erreur : " + (data.error || "Impossible de mettre à jour la base."));
       }
     } catch (e) {
       hideLoader();

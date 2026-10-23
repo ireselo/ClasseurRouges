@@ -220,6 +220,49 @@ try {
                 continue
             }
 
+            if ($req.HttpMethod -eq "POST" -and $path -eq "/api/end-school-year") {
+                $sr = New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)
+                $bodyJson = $sr.ReadToEnd()
+                $sr.Close()
+                $payload = $bodyJson | ConvertFrom-Json
+
+                $repeatingIds = @()
+                if ($null -ne $payload.repeatingStudentIds) {
+                    $repeatingIds = @($payload.repeatingStudentIds | ForEach-Object { [string]$_ })
+                }
+
+                $db = Load-Database $baseDir
+                $remainingStudents = @()
+                $deletedCount = 0
+                $keptCount = 0
+
+                foreach ($st in $db.students) {
+                    $has11InHistory = ($null -ne $st.history -and @($st.history | Where-Object { $_.niveau -eq "11CO" }).Count -gt 0)
+                    $is11 = ($st.niveauActuel -eq "11CO") -or $has11InHistory -or ($st.classeActuelle -match '^11')
+
+                    if ($is11) {
+                        if ($repeatingIds -contains [string]$st.id) {
+                            $remainingStudents += $st
+                            $keptCount++
+                        } else {
+                            $deletedCount++
+                        }
+                    } else {
+                        $remainingStudents += $st
+                    }
+                }
+
+                $db.students = @($remainingStudents)
+                Save-Database $baseDir $db
+                Send-JsonResponse $res @{
+                    ok = $true
+                    deletedCount = $deletedCount
+                    keptCount = $keptCount
+                    db = $db
+                }
+                continue
+            }
+
             if ($req.HttpMethod -eq "POST" -and $path -eq "/api/export-excel") {
                 $sr = New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)
                 $bodyJson = $sr.ReadToEnd()
