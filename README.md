@@ -1,36 +1,41 @@
-# ClasseurRouges
-Programme qui stocke de manière locale les notes des élèves sur leurs 3 ans de cycle et génère des rapports par classe ou par élève.
+# Classeurs Rouges — Suivi pluriannuel des élèves (Cycle d'Orientation)
 
-Aplicación local (100 % offline) para almacenar el seguimiento académico de los alumnos durante sus 3 años de Cycle d'Orientation (9e, 10e, 11e) y generar vistas e informes Excel por clase/cohorte o por alumno.
+Application locale (**100 % hors-ligne et confidentielle**) permettant de stocker et d'analyser le suivi scolaire longitudinal des élèves durant leurs 3 années au Cycle d'Orientation (**9CO • 10CO • 11CO**) et de générer des vues synthétiques ainsi que des rapports Excel (`.xlsx`) complets par classe/cohorte ou par élève.
 
-## Características principales
+## Fonctionnalités principales
 
-- **Importación multiformato con guardado automático:**
-  - **Archivos XML (`Notes*.xml` y `Absences*.xml`):** importa automáticamente las notas por trimestre (`T1`, `T2`, `T3`), calcula las medias anuales y ponderadas (respetando las notas con `Compte="0"` entre paréntesis sin incluirlas en la media), y registra las ausencias, retrasos y dispensas de Educación Física. Los datos se guardan automáticamente en la base de datos al importarlos.
-  - **Listado de profesores (`*MaitresParGroupe.xls`, `.xlsx`, `.csv`):** vincula los profesores de cada asignatura y el *Maître de classe* a cada grupo y año escolar. Puede importarse junto con los XML o con posterioridad para actualizar los boletines ya guardados.
-  - **Boletines en PDF (`*.pdf`):** mantiene la importación tradicional de boletines escolares en PDF con revisión previa antes de guardar.
-- **Nombres de profesores en fichas individuales:**
-  - El nombre del profesor aparece debajo de cada asignatura únicamente en las **Fichas Individuales de Alumnos** (tanto en la aplicación como en las pestañas individuales del informe Excel exportado), manteniendo limpia la **Vista Clase / Cohorte**.
-- **Filtro por Año Escolar y Clase:**
-  - Permite filtrar por **Año escolar** (`Année scolaire`) y por **Clase** tanto en la vista de cohorte como en las fichas individuales de los alumnos.
-  - Al seleccionar un año escolar, se muestran las clases correspondientes a ese año y los alumnos que cursaron en dicha clase durante ese año escolar, conservando el historial completo de 9e, 10e y 11e de cada alumno.
-- **Exportación a Excel (`.xlsx`):**
-  - Genera libros Excel completos con hojas resumen por cohorte/clase y pestañas individuales formateadas para cada alumno (incluyendo asignaturas, profesores, medias por grupo, ausencias y observaciones).
+- **Importation multiformat avec enregistrement automatique :**
+  - **Fichiers XML (`Notes*.xml` et `Absences*.xml`) :** importe automatiquement les notes trimestrielles (`T1`, `T2`, `T3`), calcule les moyennes annuelles et les moyennes des disciplines principales (en respectant les notes indicatives `Compte="0"` affichées entre parenthèses sans les inclure dans le calcul des moyennes), et enregistre les absences par trimestre et au total. Les données XML sont fusionnées et enregistrées automatiquement dans la base de données lors de l'importation.
+  - **Liste des professeurs (`*MaitresParGroupe.xls`, `.xlsx`, `.csv`) :** associe automatiquement les professeurs de chaque discipline et le/la *Maître-sse de classe* à chaque cours, classe et année scolaire. Peut être importée simultanément avec les fichiers XML ou ultérieurement pour mettre à jour les dossiers déjà enregistrés.
+  - **Bulletins scolaires en PDF (`*.pdf`) :** extraction locale des bulletins PDF avec écran de vérification visuelle côte à côte avant sauvegarde.
+- **Affichage des professeurs dans les fiches individuelles :**
+  - Le nom du/des professeur(s) s'affiche sous chaque discipline dans les **Fiches Individuelles des Élèves** (aussi bien dans l'interface que dans les onglets individuels des rapports Excel exportés), tout en gardant la **Vue Classe / Cohorte** claire et synthétique.
+- **Filtrage par Année scolaire et par Classe :**
+  - Permet de filtrer par **Année scolaire** (`Année scolaire`) et par **Classe** dans la vue de cohorte ainsi que dans les fiches individuelles des élèves.
+  - La sélection d'une année scolaire affiche les classes correspondantes et les élèves ayant fréquenté cette classe durant l'année choisie, tout en conservant l'historique complet des 3 années (`9CO`, `10CO`, `11CO`) et la détection des redoublements.
+- **Navigation fluide avec barre de défilement horizontal toujours visible :**
+  - Les tableaux de suivi disposent d'une barre de défilement horizontal persistante (*sticky*) fixée en bas de la zone visible de l'écran, permettant de faire défiler les colonnes horizontalement à tout moment sans devoir descendre jusqu'en bas de la page.
+- **Exportation Excel (`.xlsx`) unitaire ou par lot (1 fichier Excel par classe) :**
+  - **Rapport Excel de la sélection :** génère un classeur Excel multi-feuilles comprenant la synthèse pluriannuelle de la cohorte, le détail des notes pour `9CO`, `10CO` et `11CO`, ainsi qu'un onglet individuel formaté pour chaque élève (disciplines, professeurs, moyennes, absences, situation de promotion et orientation).
+  - **Génération de tous les rapports Excel par classe d'une année scolaire :** un bouton dédié (**`📚 Générer 1 Excel par Classe`**) permet d'exporter en une seule opération tous les rapports Excel d'une année scolaire, à raison d'un fichier `.xlsx` complet par classe dans le dossier choisi.
+- **Clôture de fin d'année scolaire (tri des élèves de 11CO) :**
+  - Le bouton **`🎓 Fin d'année (Élèves 11CO)`** ouvre une fenêtre permettant de sélectionner les élèves qui redoublent en `11CO` (avec sélection automatique possible des élèves « non promus ») afin de conserver leur dossier et de supprimer les élèves de `11CO` sortants qui quittent le Cycle d'Orientation, tout en gardant intacts les élèves de `9CO` et `10CO` (avec sauvegarde automatique préalable dans `data/backups/`).
 
-## Estructura del proyecto
+## Structure du projet
 
-- `Lancer_Classeurs_Rouges.bat`: lanzador de la aplicación (abre el servidor local en PowerShell y la interfaz en Microsoft Edge en modo aplicación).
-- `src/`: código fuente de la aplicación:
-  - `Server.ps1`: servidor HTTP local y endpoints de la API.
-  - `Engine.ps1`: lógica de negocio, importación de XML/Excel/CSV/PDF, mapeo de códigos de asignaturas del CO, cálculo de medias y base de datos JSON.
-  - `ui.html`: interfaz gráfica de usuario.
-  - `NativePdfExtractor.cs`: extractor nativo en C# para boletines en formato PDF.
-  - `XlsxWriter.cs`: generador nativo en C# de archivos Excel `.xlsx` OpenXML sin dependencias externas.
-- `data/`: base de datos local (`database.json`) y copias de seguridad automáticas (`backups/`) — *ignorado por Git*.
-- `Bulletins_Exemples/`, `Rapports_Excel/`: carpetas para documentos de ejemplo e informes Excel generados — *ignoradas por Git*.
+- `Lancer_Classeurs_Rouges.bat` : lanceur de l'application (démarre le serveur local PowerShell et ouvre l'interface dans Microsoft Edge en mode application).
+- `src/` : code source de l'application :
+  - `Server.ps1` : serveur HTTP local (`127.0.0.1`) et routes de l'API.
+  - `Engine.ps1` : moteur d'extraction et de traitement (XML, Excel, CSV, PDF/OCR), résolution des codes de cours du CO, calcul des moyennes, gestion de la base de données JSON et génération des rapports Excel.
+  - `ui.html` : interface graphique de l'application.
+  - `NativePdfExtractor.cs` : extracteur natif en C# pour les bulletins PDF numériques.
+  - `XlsxWriter.cs` : générateur natif en C# de classeurs Excel `.xlsx` (OpenXML) sans dépendance externe.
+- `data/` : base de données locale (`classeurs_rouges_db.json`) et sauvegardes automatiques (`backups/`) — *ignoré par Git*.
+- `Rapports_Excel/` : dossier par défaut pour l'enregistrement des classeurs Excel générés — *ignoré par Git*.
 
-## Requisitos y uso
+## Prérequis et utilisation
 
-1. Ejecutar `Lancer_Classeurs_Rouges.bat` en Windows (requiere PowerShell 5.1+ y Microsoft Edge; si se importan archivos `.xls`/`.xlsx` directamente, utiliza Microsoft Excel instalado o acepta archivos `.csv` sin necesidad de Excel).
-2. En la pestaña **Importation Documents**, arrastrar o seleccionar los archivos XML de notas/ausencias, el archivo Excel/CSV de profesores y/o los boletines PDF.
-3. Consultar los datos en **Vue Classe / Cohorte** o **Fiches Individuelles Élèves** filtrando por **Año escolar** y **Clase**, o pulsar **Exporter Excel (.xlsx)** para generar el informe completo.
+1. Exécuter `Lancer_Classeurs_Rouges.bat` sous Windows (nécessite PowerShell 5.1+ et Microsoft Edge ; l'importation directe de fichiers `.xls`/`.xlsx` utilise Microsoft Excel s'il est installé, ou accepte directement les fichiers `.csv` sans Excel).
+2. Dans l'onglet **Importer (PDF / XML / CSV)**, glisser-déposer ou sélectionner les fichiers XML de notes et d'absences, le fichier Excel/CSV des professeurs et/ou les bulletins PDF.
+3. Consulter le suivi dans **Vue Classe / Cohorte (3 ans)** ou **Fiches Individuelles Élèves** en filtrant par **Année scolaire** et par **Classe**.
+4. Cliquer sur **Générer le Classeur Excel (.xlsx)** pour exporter la sélection actuelle, ou sur **Générer 1 Excel par Classe** pour générer automatiquement un fichier Excel pour chaque classe de l'année scolaire choisie.

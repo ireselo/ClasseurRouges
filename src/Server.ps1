@@ -1,4 +1,4 @@
-﻿# Serveur Local & Lanceur d'Application - Classeurs Rouges (CO Geneve)
+# Serveur Local & Lanceur d'Application - Classeurs Rouges (CO Geneve)
 # Fonctionne 100% hors-ligne (127.0.0.1 uniquement)
 
 $ErrorActionPreference = "Continue"
@@ -44,6 +44,28 @@ function Select-SaveExcelDialog([string]$defaultFileName) {
     $form.Dispose()
     if ($res -eq [System.Windows.Forms.DialogResult]::OK) {
         return $dlg.FileName
+    }
+    return ""
+}
+
+function Select-ExportFolderDialog([string]$description = "Sélectionner le dossier où enregistrer les rapports Excel (1 fichier par classe)") {
+    $rapportsDir = Join-Path $baseDir "Rapports_Excel"
+    if (-not (Test-Path $rapportsDir)) {
+        New-Item -ItemType Directory -Path $rapportsDir -Force | Out-Null
+    }
+    $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
+    $dlg.Description = $description
+    $dlg.SelectedPath = $rapportsDir
+    $dlg.ShowNewFolderButton = $true
+    $form = New-Object System.Windows.Forms.Form
+    $form.TopMost = $true
+    $form.WindowState = [System.Windows.Forms.FormWindowState]::Minimized
+    $form.Show()
+    $form.Hide()
+    $res = $dlg.ShowDialog($form)
+    $form.Dispose()
+    if ($res -eq [System.Windows.Forms.DialogResult]::OK) {
+        return $dlg.SelectedPath
     }
     return ""
 }
@@ -233,6 +255,49 @@ try {
                 continue
             }
 
+            if ($req.HttpMethod -eq "POST" -and $path -eq "/api/end-school-year") {
+                $sr = New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)
+                $bodyJson = $sr.ReadToEnd()
+                $sr.Close()
+                $payload = $bodyJson | ConvertFrom-Json
+
+                $repeatingIds = @()
+                if ($null -ne $payload.repeatingStudentIds) {
+                    $repeatingIds = @($payload.repeatingStudentIds | ForEach-Object { [string]$_ })
+                }
+
+                $db = Load-Database $baseDir
+                $remainingStudents = @()
+                $deletedCount = 0
+                $keptCount = 0
+
+                foreach ($st in $db.students) {
+                    $has11InHistory = ($null -ne $st.history -and @($st.history | Where-Object { $_.niveau -eq "11CO" }).Count -gt 0)
+                    $is11 = ($st.niveauActuel -eq "11CO") -or $has11InHistory -or ($st.classeActuelle -match '^11')
+
+                    if ($is11) {
+                        if ($repeatingIds -contains [string]$st.id) {
+                            $remainingStudents += $st
+                            $keptCount++
+                        } else {
+                            $deletedCount++
+                        }
+                    } else {
+                        $remainingStudents += $st
+                    }
+                }
+
+                $db.students = @($remainingStudents)
+                Save-Database $baseDir $db
+                Send-JsonResponse $res @{
+                    ok = $true
+                    deletedCount = $deletedCount
+                    keptCount = $keptCount
+                    db = $db
+                }
+                continue
+            }
+
             if ($req.HttpMethod -eq "POST" -and $path -eq "/api/export-excel") {
                 . (Join-Path $baseDir "src\Engine.ps1")
                 $sr = New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)
@@ -261,6 +326,39 @@ try {
                 }
 
                 Send-JsonResponse $res @{ ok = $true; cancelled = $false; filePath = $savePath }
+                continue
+            }
+
+            if ($req.HttpMethod -eq "POST" -and $path -eq "/api/export-all-classes-excel") {
+                . (Join-Path $baseDir "src\Engine.ps1")
+                $sr = New-Object System.IO.StreamReader($req.InputStream, [System.Text.Encoding]::UTF8)
+                $bodyJson = $sr.ReadToEnd()
+                $sr.Close()
+                $payload = $bodyJson | ConvertFrom-Json
+
+                $targetAnnee = if ($payload.PSObject.Properties["anneeScolaire"] -and $payload.anneeScolaire) { $payload.anneeScolaire } else { "TOUTES" }
+                $yrDesc = if ($targetAnnee -eq "TOUTES") { "toutes les années" } else { "l'année scolaire $targetAnnee" }
+
+                $folderPath = Select-ExportFolderDialog "Sélectionner le dossier où générer les classeurs Excel par classe pour $yrDesc"
+                if ([string]::IsNullOrWhiteSpace($folderPath)) {
+                    Send-JsonResponse $res @{ ok = $true; cancelled = $true }
+                    continue
+                }
+
+                $db = Load-Database $baseDir
+                $generatedFiles = Export-AllClassesExcelReportsForYear $db $targetAnnee $folderPath
+
+                if ($payload.openAfter -eq $true -and $generatedFiles.Count -gt 0 -and (Test-Path $folderPath)) {
+                    Start-Process $folderPath
+                }
+
+                Send-JsonResponse $res @{
+                    ok         = $true
+                    cancelled  = $false
+                    folderPath = $folderPath
+                    count      = $generatedFiles.Count
+                    files      = @($generatedFiles)
+                }
                 continue
             }
 

@@ -125,15 +125,30 @@ namespace ClasseursRouges
             sb.Append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>");
             sb.Append("<workbook xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\" xmlns:r=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships\">");
             sb.Append("<sheets>");
+            HashSet<string> usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (int i = 0; i < sheets.Count; i++)
             {
                 string safeName = sheets[i].Name;
                 if (string.IsNullOrWhiteSpace(safeName)) safeName = "Feuille" + (i + 1);
                 foreach (char c in new char[] { '\\', '/', '?', '*', '[', ']', ':' })
                     safeName = safeName.Replace(c.ToString(), "-");
-                if (safeName.Length > 31) safeName = safeName.Substring(0, 31);
+                safeName = safeName.Trim();
+                if (string.IsNullOrWhiteSpace(safeName)) safeName = "Feuille" + (i + 1);
+                if (safeName.Length > 31) safeName = safeName.Substring(0, 31).Trim();
 
-                sb.AppendFormat("<sheet name=\"{0}\" sheetId=\"{1}\" r:id=\"rId{1}\"/>", EscapeXml(safeName), i + 1);
+                string finalName = safeName;
+                int dupIdx = 2;
+                while (usedNames.Contains(finalName))
+                {
+                    string suffix = " (" + dupIdx + ")";
+                    int maxBase = 31 - suffix.Length;
+                    string basePart = safeName.Length > maxBase ? safeName.Substring(0, maxBase).Trim() : safeName;
+                    finalName = basePart + suffix;
+                    dupIdx++;
+                }
+                usedNames.Add(finalName);
+
+                sb.AppendFormat("<sheet name=\"{0}\" sheetId=\"{1}\" r:id=\"rId{1}\"/>", EscapeXml(finalName), i + 1);
             }
             sb.Append("</sheets></workbook>");
             return sb.ToString();

@@ -1,4 +1,4 @@
-﻿# Engine: Extraction PDF & Generation Excel (.xlsx) - Classeurs Rouges (CO Geneve)
+# Engine: Extraction PDF & Generation Excel (.xlsx) - Classeurs Rouges (CO Geneve)
 
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 Add-Type -AssemblyName System.Drawing
@@ -1846,4 +1846,49 @@ function Export-CohortExcelReport($db, [string]$targetClasse, [string]$outputPat
 
     [ClasseursRouges.XlsxWriter]::SaveWorkbook($outputPath, $sheets)
     return $outputPath
+}
+
+function Export-AllClassesExcelReportsForYear($db, [string]$targetAnnee, [string]$outputFolder) {
+    if (-not (Test-Path $outputFolder)) {
+        New-Item -ItemType Directory -Path $outputFolder -Force | Out-Null
+    }
+    $filterByYr = (-not [string]::IsNullOrWhiteSpace($targetAnnee) -and $targetAnnee -ne "TOUTES")
+    $pairs = New-Object 'System.Collections.Generic.List[object]'
+    $seenKeys = @{}
+
+    foreach ($st in @($db.students)) {
+        foreach ($h in @($st.history)) {
+            $cls = if ($h.classe) { $h.classe.Trim() } else { "" }
+            if ([string]::IsNullOrWhiteSpace($cls)) { continue }
+            $yr = if ($h.anneeScolaire) { $h.anneeScolaire.Trim() } else { "" }
+            if ($filterByYr -and $yr -ne $targetAnnee) { continue }
+            $effYr = if ($filterByYr) { $targetAnnee } else { $yr }
+            $key = "${effYr}|${cls}"
+            if (-not $seenKeys.ContainsKey($key)) {
+                $seenKeys[$key] = $true
+                $pairs.Add([PSCustomObject]@{
+                    anneeScolaire = $effYr
+                    classe        = $cls
+                })
+            }
+        }
+    }
+
+    $sortedPairs = @($pairs | Sort-Object anneeScolaire, classe)
+    $dateStr = (Get-Date).ToString("yyyy-MM-dd")
+    $generatedFiles = @()
+
+    foreach ($item in $sortedPairs) {
+        $yr = $item.anneeScolaire
+        $cls = $item.classe
+        $cleanYr = if ([string]::IsNullOrWhiteSpace($yr) -or $yr -eq "TOUTES") { "" } else { ($yr -replace '[\\/:*?"<>|]', '-') + "_" }
+        $safeCls = $cls -replace '[\\/:*?"<>|]', '-'
+        $fileName = "Classeur_Rouge_${cleanYr}${safeCls}_${dateStr}.xlsx"
+        $outPath = Join-Path $outputFolder $fileName
+        $yrFilter = if ([string]::IsNullOrWhiteSpace($yr)) { "TOUTES" } else { $yr }
+        Export-CohortExcelReport $db $cls $outPath $yrFilter | Out-Null
+        $generatedFiles += $outPath
+    }
+
+    return ,$generatedFiles
 }
